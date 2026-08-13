@@ -251,7 +251,7 @@ document.getElementById('createAccountBtn').addEventListener('click', async () =
     return;
   }
   document.getElementById('loginMsg').textContent = 'Creating account…';
-  const { data, error } = await supa.auth.signUp({ email, password });
+  const { data, error } = await supa.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + '/app.html' } });
   if (error){
     document.getElementById('loginMsg').textContent = error.message;
     return;
