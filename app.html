@@ -398,18 +398,18 @@ const PAINT_BRANDS = [
 // colors are fetched from PaintDB once a family is picked). Ordered around the
 // color wheel with neutrals at the end, similar to Sherwin-Williams' Color Expert app.
 const COLOR_FAMILIES = [
-{slug:'red', name:'Red', hex:'#B3403C'},
-{slug:'orange', name:'Orange', hex:'#D98442'},
-{slug:'yellow', name:'Yellow', hex:'#E0C24A'},
-{slug:'green', name:'Green', hex:'#6B8F5D'},
-{slug:'blue', name:'Blue', hex:'#4C7DA8'},
-{slug:'purple', name:'Purple', hex:'#8067A0'},
-{slug:'pink', name:'Pink', hex:'#D98CA0'},
-{slug:'white', name:'White', hex:'#F5F3EF'},
-{slug:'beige', name:'Beige', hex:'#D9CBB5'},
-{slug:'gray', name:'Gray', hex:'#9CA3A8'},
-{slug:'brown', name:'Brown', hex:'#7B5B43'},
-{slug:'black', name:'Black', hex:'#2B2B2B'}
+{slug:'red', name:'Red Base', gradient:'linear-gradient(90deg, #F2D6D4, #B3403C, #5C1A17)'},
+{slug:'orange', name:'Orange Base', gradient:'linear-gradient(90deg, #F5DCC2, #D98442, #7A431C)'},
+{slug:'yellow', name:'Yellow Base', gradient:'linear-gradient(90deg, #F7EFC2, #E0C24A, #8A6A12)'},
+{slug:'green', name:'Green Base', gradient:'linear-gradient(90deg, #DCE8D6, #6B8F5D, #2F4A27)'},
+{slug:'blue', name:'Blue Base', gradient:'linear-gradient(90deg, #D6E4EE, #4C7DA8, #1F3A54)'},
+{slug:'purple', name:'Purple Base', gradient:'linear-gradient(90deg, #E4DCEE, #8067A0, #3E2F55)'},
+{slug:'pink', name:'Pink Base', gradient:'linear-gradient(90deg, #F5E2E8, #D98CA0, #7A3D4B)'},
+{slug:'white', name:'White Base', gradient:'linear-gradient(90deg, #FFFFFF, #F5F3EF, #DDD9D0)'},
+{slug:'beige', name:'Beige Base', gradient:'linear-gradient(90deg, #F2EAD9, #D9CBB5, #A18E6C)'},
+{slug:'gray', name:'Gray Base', gradient:'linear-gradient(90deg, #E4E6E7, #9CA3A8, #55595C)'},
+{slug:'brown', name:'Brown Base', gradient:'linear-gradient(90deg, #D8C3AE, #7B5B43, #3B2A1D)'},
+{slug:'black', name:'Black Base', gradient:'linear-gradient(90deg, #6E6E6E, #2B2B2B, #0A0A0A)'}
 ];
 
 let selectedBrand = null;   // { slug, name } | null
@@ -465,7 +465,7 @@ grid.innerHTML = '';
 COLOR_FAMILIES.forEach(fam => {
 const tile = document.createElement('div');
 tile.className = 'family-tile';
-tile.innerHTML = `<div class="swatch-fill" style="background:${fam.hex}"></div><div class="label">${fam.name}</div>`;
+tile.innerHTML = `<div class="swatch-fill" style="background:${fam.gradient}"></div><div class="label">${fam.name}</div>`;
 tile.addEventListener('click', () => openFamily(fam));
 grid.appendChild(tile);
 });
