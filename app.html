@@ -8,554 +8,682 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root{
-    --ink:#0A1415; --panel:#164541; --panel-3:#173430; --teal:#2BB8AC; --teal-dim:#1C8F85;
-    --white:#fff; --muted:#A3C2BF; --muted-2:#7B9895; --line:rgba(166,240,230,0.24); --radius:16px;
-  }
-  *{box-sizing:border-box;}
-  body{margin:0; background:var(--ink); color:var(--white); font-family:'Inter',sans-serif;}
-  h1,h2,h3{font-family:'Space Grotesk',sans-serif; margin:0;}
-  .mono{font-family:'JetBrains Mono',monospace;}
-  .hidden{display:none !important;}
-  .wrap{max-width:1080px; margin:0 auto; padding:0 24px;}
-  .btn{font-weight:600; font-size:14px; border-radius:10px; padding:11px 20px; border:1px solid transparent; cursor:pointer;}
-  .btn-primary{background:var(--teal); color:#062421;}
-  .btn-ghost{background:transparent; color:#fff; border-color:rgba(255,255,255,0.25);}
-  input, textarea{background:var(--panel-3); border:1px solid var(--line); color:#fff; border-radius:10px; padding:10px 12px; font-family:inherit; font-size:14px;}
+:root{
+--ink:#0A1415; --panel:#164541; --panel-3:#173430; --teal:#2BB8AC; --teal-dim:#1C8F85;
+--white:#fff; --muted:#A3C2BF; --muted-2:#7B9895; --line:rgba(166,240,230,0.24); --radius:16px;
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--ink); color:var(--white); font-family:'Inter',sans-serif;}
+h1,h2,h3{font-family:'Space Grotesk',sans-serif; margin:0;}
+.mono{font-family:'JetBrains Mono',monospace;}
+.hidden{display:none !important;}
+.wrap{max-width:1080px; margin:0 auto; padding:0 24px;}
+.btn{font-weight:600; font-size:14px; border-radius:10px; padding:11px 20px; border:1px solid transparent; cursor:pointer;}
+.btn-primary{background:var(--teal); color:#062421;}
+.btn-ghost{background:transparent; color:#fff; border-color:rgba(255,255,255,0.25);}
+input, textarea{background:var(--panel-3); border:1px solid var(--line); color:#fff; border-radius:10px; padding:10px 12px; font-family:inherit; font-size:14px;}
 
-  /* ---- login screen ---- */
-  #loginScreen{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;}
-  .login-card{background:var(--panel-3); border:1px solid var(--line); border-radius:20px; padding:40px; max-width:380px; width:100%; text-align:center;}
-  .login-card h1{font-size:26px; margin-bottom:8px;}
-  .login-card p{color:var(--muted); font-size:14px; margin-bottom:24px;}
-  .login-card input{width:100%; margin-bottom:12px;}
-  .login-card .btn{width:100%;}
-  #loginMsg{margin-top:14px; font-size:13px; color:var(--teal);}
+/* ---- login screen ---- */
+#loginScreen{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;}
+.login-card{background:var(--panel-3); border:1px solid var(--line); border-radius:20px; padding:40px; max-width:380px; width:100%; text-align:center;}
+.login-card h1{font-size:26px; margin-bottom:8px;}
+.login-card p{color:var(--muted); font-size:14px; margin-bottom:24px;}
+.login-card input{width:100%; margin-bottom:12px;}
+.login-card .btn{width:100%;}
+#loginMsg{margin-top:14px; font-size:13px; color:var(--teal);}
 
-  /* ---- app shell ---- */
-  header{border-bottom:1px solid var(--line); padding:16px 0;}
-  header .wrap{display:flex; justify-content:space-between; align-items:center;}
-  .brand{font-weight:700; font-size:18px;}
-  .brand .z{color:var(--teal);}
-  .credits-pill{font-family:'JetBrains Mono'; font-size:12px; background:var(--panel); border:1px solid var(--line); padding:6px 12px; border-radius:999px; color:var(--teal);}
-  nav.tabs{display:flex; gap:8px; margin:24px 0;}
-  nav.tabs button{background:transparent; border:1px solid var(--line); color:var(--muted); padding:9px 16px; border-radius:10px; cursor:pointer; font-size:13.5px; font-weight:600;}
-  nav.tabs button.active{background:var(--panel); color:var(--teal); border-color:var(--teal);}
+/* ---- app shell ---- */
+header{border-bottom:1px solid var(--line); padding:16px 0;}
+header .wrap{display:flex; justify-content:space-between; align-items:center;}
+.brand{font-weight:700; font-size:18px;}
+.brand .z{color:var(--teal);}
+.credits-pill{font-family:'JetBrains Mono'; font-size:12px; background:var(--panel); border:1px solid var(--line); padding:6px 12px; border-radius:999px; color:var(--teal);}
+nav.tabs{display:flex; gap:8px; margin:24px 0;}
+nav.tabs button{background:transparent; border:1px solid var(--line); color:var(--muted); padding:9px 16px; border-radius:10px; cursor:pointer; font-size:13.5px; font-weight:600;}
+nav.tabs button.active{background:var(--panel); color:var(--teal); border-color:var(--teal);}
 
-  .card{background:var(--panel-3); border:1px solid var(--line); border-radius:var(--radius); padding:24px; margin-bottom:20px;}
-  .toggle-row{display:flex; gap:8px; margin-bottom:16px;}
-  .toggle-row button{flex:1;}
-  .swatch-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; max-height:280px; overflow-y:auto; margin-top:12px;}
-  .swatch{border:2px solid transparent; border-radius:10px; overflow:hidden; cursor:pointer; background:var(--panel);}
-  .swatch.selected{border-color:var(--teal);}
-  .swatch .fill{height:56px;}
-  .swatch .meta{padding:8px; font-size:11px;}
-  .swatch .meta .n{font-weight:600; display:block;}
-  .swatch .meta .c{color:var(--muted-2); font-family:'JetBrains Mono'; font-size:10px;}
-  .upload-drop{border:1px dashed var(--line); border-radius:12px; padding:24px; text-align:center; color:var(--muted); cursor:pointer;}
-  .preview-row{display:flex; gap:16px; margin-top:16px; flex-wrap:wrap;}
-  .preview-row img{max-width:260px; border-radius:10px; border:1px solid var(--line);}
-  .render-result{margin-top:20px;}
-  .render-result img{width:100%; max-width:480px; border-radius:12px; border:1px solid var(--line);}
-  .correction-box{margin-top:16px; display:flex; gap:10px;}
-  .correction-box textarea{flex:1; min-height:60px;}
-  .history-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:16px;}
-  .history-item{background:var(--panel-3); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
-  .history-item img{width:100%; aspect-ratio:4/3; object-fit:cover;}
-  .history-item .meta{padding:10px; font-size:12px; color:var(--muted);}
-  .plan-cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px;}
-  .plan-cards .card{display:flex; flex-direction:column; margin-bottom:0;}
-  .plan-cards .card .status-line{flex:1;}
-  .plan-cards .card .btn{margin-top:14px;}
-  .status-line{font-size:13px; color:var(--muted); margin-top:10px;}
-  label.field{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em; font-family:'JetBrains Mono';}
+.card{background:var(--panel-3); border:1px solid var(--line); border-radius:var(--radius); padding:24px; margin-bottom:20px;}
+.toggle-row{display:flex; gap:8px; margin-bottom:16px;}
+.toggle-row button{flex:1;}
+.swatch-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; max-height:360px; overflow-y:auto; margin-top:12px;}
+.swatch{border:2px solid transparent; border-radius:10px; overflow:hidden; cursor:pointer; background:var(--panel);}
+.swatch.selected{border-color:var(--teal);}
+.swatch .fill{height:56px;}
+.swatch .meta{padding:8px; font-size:11px;}
+.swatch .meta .n{font-weight:600; display:block;}
+.swatch .meta .c{color:var(--muted-2); font-family:'JetBrains Mono'; font-size:10px;}
+.upload-drop{border:1px dashed var(--line); border-radius:12px; padding:24px; text-align:center; color:var(--muted); cursor:pointer;}
+.preview-row{display:flex; gap:16px; margin-top:16px; flex-wrap:wrap;}
+.preview-row img{max-width:260px; border-radius:10px; border:1px solid var(--line);}
+.render-result{margin-top:20px;}
+.render-result img{width:100%; max-width:480px; border-radius:12px; border:1px solid var(--line);}
+.correction-box{margin-top:16px; display:flex; gap:10px;}
+.correction-box textarea{flex:1; min-height:60px;}
+.history-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:16px;}
+.history-item{background:var(--panel-3); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
+.history-item img{width:100%; aspect-ratio:4/3; object-fit:cover;}
+.history-item .meta{padding:10px; font-size:12px; color:var(--muted);}
+.plan-cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px;}
+.plan-cards .card{display:flex; flex-direction:column; margin-bottom:0;}
+.plan-cards .card .status-line{flex:1;}
+.plan-cards .card .btn{margin-top:14px;}
+.status-line{font-size:13px; color:var(--muted); margin-top:10px;}
+label.field{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em; font-family:'JetBrains Mono';}
+
+/* ---- custom themed brand dropdown (native <select> can't be themed cross-browser) ---- */
+.custom-select{position:relative;}
+.custom-select-btn{width:100%; text-align:left; background:var(--panel-3); border:1px solid var(--line); color:#fff; border-radius:10px; padding:10px 12px; font-size:14px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-family:inherit;}
+.custom-select-btn .chev{color:var(--muted); margin-left:8px; transition:transform .15s;}
+.custom-select-btn.open .chev{transform:rotate(180deg);}
+.custom-select-list{position:absolute; top:calc(100% + 6px); left:0; right:0; max-height:280px; overflow-y:auto; background:var(--panel-3); border:1px solid var(--line); border-radius:10px; z-index:30; box-shadow:0 12px 28px rgba(0,0,0,0.45);}
+.custom-select-list .opt{padding:10px 12px; font-size:14px; cursor:pointer; color:#fff;}
+.custom-select-list .opt:hover, .custom-select-list .opt.active{background:var(--panel); color:var(--teal);}
+
+/* ---- brand -> family -> colors picker ---- */
+.family-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:10px; margin-top:12px;}
+.family-tile{border-radius:10px; overflow:hidden; cursor:pointer; border:1px solid var(--line); background:var(--panel); transition:transform .1s, border-color .1s;}
+.family-tile:hover{border-color:var(--teal); transform:translateY(-1px);}
+.family-tile .swatch-fill{height:52px;}
+.family-tile .label{padding:8px 6px; font-size:11.5px; font-weight:600; text-align:center;}
+.colors-step-header{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
+.colors-step-header .btn{padding:8px 14px; font-size:13px;}
+#colorSearch{width:100%; margin-bottom:4px;}
+#loadMoreBtn{width:100%; margin-top:12px;}
 </style>
 </head>
 <body>
 
 <!-- ============================================================
-CONFIG — fill these in before deploying. Nothing else in this
+CONFIG â fill these in before deploying. Nothing else in this
 file needs to change to go live once these are set.
 ============================================================ -->
 <script>
 const CONFIG = {
-  SUPABASE_URL: "https://pwkrwyemkjlmjdacelyi.supabase.co",
-  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3a3J3eWVta2psbWpkYWNlbHlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzODM0NzcsImV4cCI6MjEwMTk1OTQ3N30.fwJviU13Q967H145Czqg9ocfl4vlVDnjRewaADWxWFw",
-  N8N_RENDER_WEBHOOK: "https://n8n-production-e390.up.railway.app/webhook/paintrz-render",
-  PAINTDB_API: "https://paintdb.com/api/v1",   // free, no key required — see https://paintdb.com/api/v1
-  PAINTDB_PROXY: "https://n8n-production-e390.up.railway.app/webhook/paintrz-colors",
-  RENDER_COST_CENTS: 85,
-  FREE_CORRECTIONS: 2,
-  PHOTOS_BUCKET: "photos"
+SUPABASE_URL: "https://pwkrwyemkjlmjdacelyi.supabase.co",
+SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3a3J3eWVta2psbWpkYWNlbHlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzODM0NzcsImV4cCI6MjEwMTk1OTQ3N30.fwJviU13Q967H145Czqg9ocfl4vlVDnjRewaADWxWFw",
+N8N_RENDER_WEBHOOK: "https://n8n-production-e390.up.railway.app/webhook/paintrz-render",
+PAINTDB_API: "https://paintdb.com/api/v1", // free, no key required â see https://paintdb.com/api/v1
+PAINTDB_PROXY: "https://n8n-production-e390.up.railway.app/webhook/paintrz-colors",
+RENDER_COST_CENTS: 85,
+FREE_CORRECTIONS: 2,
+PHOTOS_BUCKET: "photos"
 };
 </script>
 
 <!-- ============================================================ LOGIN ============================================================ -->
 <div id="loginScreen">
-  <div class="login-card">
-    <h1>PAINTR<span style="color:var(--teal)">Z</span></h1>
-    <p id="loginIntro">See it finished before you sell it. Sign in to your account.</p>
-    <input type="email" id="loginEmail" placeholder="you@company.com" autocomplete="email">
-    <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" style="width:100%; margin-top:12px;">
-    <button class="btn btn-primary" id="signInBtn" style="width:100%; margin-top:14px;">Sign In</button>
-    <button class="btn btn-ghost" id="createAccountBtn" style="width:100%; margin-top:8px;">Create Account</button>
-    <p id="forgotPasswordLink" style="margin-top:14px; font-size:13px; color:var(--muted); cursor:pointer; text-decoration:underline;">Forgot password?</p>
-    <div id="loginMsg"></div>
-  </div>
+<div class="login-card">
+<h1>PAINTR<span style="color:var(--teal)">Z</span></h1>
+<p id="loginIntro">See it finished before you sell it. Sign in to your account.</p>
+<input type="email" id="loginEmail" placeholder="you@company.com" autocomplete="email">
+<input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" style="width:100%; margin-top:12px;">
+<button class="btn btn-primary" id="signInBtn" style="width:100%; margin-top:14px;">Sign In</button>
+<button class="btn btn-ghost" id="createAccountBtn" style="width:100%; margin-top:8px;">Create Account</button>
+<p id="forgotPasswordLink" style="margin-top:14px; font-size:13px; color:var(--muted); cursor:pointer; text-decoration:underline;">Forgot password?</p>
+<div id="loginMsg"></div>
+</div>
 </div>
 
 <!-- ============================================================ APP ============================================================ -->
 <div id="app" class="hidden">
-  <header>
-    <div class="wrap">
-      <div class="brand">PAINTR<span class="z">Z</span></div>
-      <div style="display:flex; align-items:center; gap:12px;">
-        <span class="credits-pill" id="creditsPill">— credits</span>
-        <button class="btn btn-ghost" id="logoutBtn">Log out</button>
-      </div>
-    </div>
-  </header>
+<header>
+<div class="wrap">
+<div class="brand">PAINTR<span class="z">Z</span></div>
+<div style="display:flex; align-items:center; gap:12px;">
+<span class="credits-pill" id="creditsPill">â credits</span>
+<button class="btn btn-ghost" id="logoutBtn">Log out</button>
+</div>
+</div>
+</header>
 
-  <div class="wrap">
-    <nav class="tabs">
-      <button data-tab="render" class="active">New render</button>
-      <button data-tab="history">History</button>
-      <button data-tab="billing">Billing</button>
-    </nav>
+<div class="wrap">
+<nav class="tabs">
+<button data-tab="render" class="active">New render</button>
+<button data-tab="history">History</button>
+<button data-tab="billing">Billing</button>
+</nav>
 
-    <!-- ---- NEW RENDER TAB ---- -->
-    <section id="tab-render">
-      <div class="card">
-        <label class="field">1. Pick a color</label>
-        <div class="toggle-row">
-          <button class="btn btn-ghost active" id="srcSearchBtn">Search paint database</button>
-          <button class="btn btn-ghost" id="srcPromptBtn">Describe a color</button>
-        </div>
-        <div id="searchPane">
-          <label class="field">Step 1 — Brand</label>
-          <select id="colorBrand" style="width:100%; margin-bottom:12px;">
-            <option value="">Choose a paint brand…</option>
-          </select>
-          <div id="brandSearchStep" class="hidden">
-            <label class="field">Step 2 — Color name or code</label>
-            <input type="text" id="colorSearch" placeholder="e.g. 'navy' or 'SW 6244' — or leave blank to browse" style="width:100%;">
-          </div>
-          <div class="swatch-grid" id="swatchGrid"></div>
-        </div>
-        <div id="promptPane" class="hidden">
-          <textarea id="colorPrompt" placeholder="e.g. 'a warm terracotta, slightly muted' or 'soft sage green'" style="width:100%; min-height:70px;"></textarea>
-        </div>
-        <div id="selectedColorLine" class="status-line"></div>
-      </div>
+<!-- ---- NEW RENDER TAB ---- -->
+<section id="tab-render">
+<div class="card">
+<label class="field">1. Pick a color</label>
+<div class="toggle-row">
+<button class="btn btn-ghost active" id="srcSearchBtn">Search paint database</button>
+<button class="btn btn-ghost" id="srcPromptBtn">Describe a color</button>
+</div>
 
-      <div class="card">
-        <label class="field">2. Upload the photo</label>
-        <div class="upload-drop" id="uploadDrop">Click to choose a photo, or drag one here</div>
-        <input type="file" id="photoInput" accept="image/*" class="hidden">
-        <div class="preview-row" id="previewRow"></div>
-      </div>
+<div id="searchPane">
+<!-- Step 1: brand (custom themed dropdown) -->
+<label class="field">Step 1 â Brand</label>
+<div class="custom-select" id="brandSelectWrap">
+<button type="button" class="custom-select-btn" id="brandSelectBtn"><span id="brandSelectLabel">Choose a paint brandâ¦</span><span class="chev">â¾</span></button>
+<div class="custom-select-list hidden" id="brandSelectList"></div>
+</div>
 
-      <div class="card">
-        <button class="btn btn-primary" id="submitRenderBtn">Generate render — 85¢</button>
-        <div class="status-line" id="renderStatus"></div>
-        <div class="render-result hidden" id="renderResult">
-          <img id="renderImg">
-          <div style="margin-top:12px; display:flex; gap:10px;">
-            <button class="btn btn-primary" id="downloadBtn">Download (branded)</button>
-            <span class="status-line" id="correctionsLeft"></span>
-          </div>
-          <div class="correction-box">
-            <textarea id="correctionInput" placeholder="Want a tweak? e.g. 'lighter' or 'more gray, less green'"></textarea>
-            <button class="btn btn-ghost" id="correctionBtn">Apply correction</button>
-          </div>
-        </div>
-      </div>
-    </section>
+<!-- Step 2: color family tiles -->
+<div id="familyStep" class="hidden">
+<label class="field" style="margin-top:16px;">Step 2 â Color family</label>
+<div class="family-grid" id="familyGrid"></div>
+</div>
 
-    <!-- ---- HISTORY TAB ---- -->
-    <section id="tab-history" class="hidden">
-      <div class="history-grid" id="historyGrid"></div>
-    </section>
+<!-- Step 3: colors within the chosen family -->
+<div id="colorsStep" class="hidden" style="margin-top:16px;">
+<div class="colors-step-header">
+<button type="button" class="btn btn-ghost" id="backToFamiliesBtn">â¹ Back to families</button>
+<span class="status-line" id="familyStepLabel" style="margin:0;"></span>
+</div>
+<input type="text" id="colorSearch" placeholder="Search within this familyâ¦ (name or code)">
+<div class="swatch-grid" id="swatchGrid"></div>
+<button type="button" class="btn btn-ghost hidden" id="loadMoreBtn">Load more colors</button>
+</div>
+</div>
 
-    <!-- ---- BILLING TAB ---- -->
-    <section id="tab-billing" class="hidden">
-      <div class="card">
-        <h3 style="margin-bottom:8px;">Current plan</h3>
-        <p class="status-line" id="planStatus">—</p>
-      </div>
-      <div class="plan-cards" style="flex-wrap:wrap;">
-        <div class="card" style="min-width:180px;">
-          <h3>Pay As You Go</h3>
-          <p class="status-line">85¢ / render, no commitment.</p>
-          <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/3cI5kD7yVfuk9JE9AEbfO01" style="margin-top:14px; width:100%;">Buy renders</button>
-        </div>
-        <div class="card" style="min-width:180px;">
-          <h3>Starter — $5/mo</h3>
-          <p class="status-line">7 renders / month.</p>
-          <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/fZu4gzaL7fuk4pkfZ2bfO00" style="margin-top:14px; width:100%;">Subscribe</button>
-        </div>
-        <div class="card" style="min-width:180px;">
-          <h3>Crew — $10/mo</h3>
-          <p class="status-line">16 renders / month.</p>
-          <button class="btn btn-primary tier-btn" data-link="https://buy.stripe.com/fZubJ12eB95W2hc004bfO02" style="margin-top:14px; width:100%;">Subscribe</button>
-        </div>
-        <div class="card" style="min-width:180px;">
-          <h3>Pro — $20/mo</h3>
-          <p class="status-line">35 renders / month.</p>
-          <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/bJebJ13iFbe4dZUeUYbfO03" style="margin-top:14px; width:100%;">Subscribe</button>
-        </div>
-        <div class="card" style="min-width:180px;">
-          <h3>Studio — $40/mo</h3>
-          <p class="status-line">80 renders / month.</p>
-          <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/fZu28rdXjeqg9JE004bfO04" style="margin-top:14px; width:100%;">Subscribe</button>
-        </div>
-      </div>
-    </section>
-  </div>
+<div id="promptPane" class="hidden">
+<textarea id="colorPrompt" placeholder="e.g. 'a warm terracotta, slightly muted' or 'soft sage green'" style="width:100%; min-height:70px;"></textarea>
+</div>
+<div id="selectedColorLine" class="status-line"></div>
+</div>
+
+<div class="card">
+<label class="field">2. Upload the photo</label>
+<div class="upload-drop" id="uploadDrop">Click to choose a photo, or drag one here</div>
+<input type="file" id="photoInput" accept="image/*" class="hidden">
+<div class="preview-row" id="previewRow"></div>
+</div>
+
+<div class="card">
+<button class="btn btn-primary" id="submitRenderBtn">Generate render â 85Â¢</button>
+<div class="status-line" id="renderStatus"></div>
+<div class="render-result hidden" id="renderResult">
+<img id="renderImg">
+<div style="margin-top:12px; display:flex; gap:10px;">
+<button class="btn btn-primary" id="downloadBtn">Download (branded)</button>
+<span class="status-line" id="correctionsLeft"></span>
+</div>
+<div class="correction-box">
+<textarea id="correctionInput" placeholder="Want a tweak? e.g. 'lighter' or 'more gray, less green'"></textarea>
+<button class="btn btn-ghost" id="correctionBtn">Apply correction</button>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ---- HISTORY TAB ---- -->
+<section id="tab-history" class="hidden">
+<div class="history-grid" id="historyGrid"></div>
+</section>
+
+<!-- ---- BILLING TAB ---- -->
+<section id="tab-billing" class="hidden">
+<div class="card">
+<h3 style="margin-bottom:8px;">Current plan</h3>
+<p class="status-line" id="planStatus">â</p>
+</div>
+<div class="plan-cards" style="flex-wrap:wrap;">
+<div class="card" style="min-width:180px;">
+<h3>Pay As You Go</h3>
+<p class="status-line">85Â¢ / render, no commitment.</p>
+<button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/3cI5kD7yVfuk9JE9AEbfO01" style="margin-top:14px; width:100%;">Buy renders</button>
+</div>
+<div class="card" style="min-width:180px;">
+<h3>Starter â $5/mo</h3>
+<p class="status-line">7 renders / month.</p>
+<button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/fZu4gzaL7fuk4pkfZ2bfO00" style="margin-top:14px; width:100%;">Subscribe</button>
+</div>
+<div class="card" style="min-width:180px;">
+<h3>Crew â $10/mo</h3>
+<p class="status-line">16 renders / month.</p>
+<button class="btn btn-primary tier-btn" data-link="https://buy.stripe.com/fZubJ12eB95W2hc004bfO02" style="margin-top:14px; width:100%;">Subscribe</button>
+</div>
+<div class="card" style="min-width:180px;">
+<h3>Pro â $20/mo</h3>
+<p class="status-line">35 renders / month.</p>
+<button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/bJebJ13iFbe4dZUeUYbfO03" style="margin-top:14px; width:100%;">Subscribe</button>
+</div>
+<div class="card" style="min-width:180px;">
+<h3>Studio â $40/mo</h3>
+<p class="status-line">80 renders / month.</p>
+<button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/fZu28rdXjeqg9JE004bfO04" style="margin-top:14px; width:100%;">Subscribe</button>
+</div>
+</div>
+</section>
+</div>
 </div>
 
 <script>
 const supa = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 let currentUser = null;
 let currentProfile = null;
-let selectedColor = null;   // { hex, name, code, brand } | null
+let selectedColor = null; // { hex, name, code, brand } | null
 let selectedFile = null;
 let currentRenderId = null;
 let correctionsUsed = 0;
 
 // ---------- AUTH ----------
 document.getElementById('signInBtn').addEventListener('click', async () => {
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  if (!email || !password){
-    document.getElementById('loginMsg').textContent = 'Enter your email and password.';
-    return;
-  }
-  document.getElementById('loginMsg').textContent = 'Signing in…';
-  const { error } = await supa.auth.signInWithPassword({ email, password });
-  if (error){
-    document.getElementById('loginMsg').textContent = error.message;
-  }
-  // on success, onAuthStateChange (below) picks up the new session and shows the app
+const email = document.getElementById('loginEmail').value.trim();
+const password = document.getElementById('loginPassword').value;
+if (!email || !password){
+document.getElementById('loginMsg').textContent = 'Enter your email and password.';
+return;
+}
+document.getElementById('loginMsg').textContent = 'Signing inâ¦';
+const { error } = await supa.auth.signInWithPassword({ email, password });
+if (error){
+document.getElementById('loginMsg').textContent = error.message;
+}
+// on success, onAuthStateChange (below) picks up the new session and shows the app
 });
 
 document.getElementById('createAccountBtn').addEventListener('click', async () => {
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  if (!email || !password){
-    document.getElementById('loginMsg').textContent = 'Enter an email and password to create an account.';
-    return;
-  }
-  if (password.length < 6){
-    document.getElementById('loginMsg').textContent = 'Password must be at least 6 characters.';
-    return;
-  }
-  document.getElementById('loginMsg').textContent = 'Creating account…';
-  const { data, error } = await supa.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + '/app.html' } });
-  if (error){
-    document.getElementById('loginMsg').textContent = error.message;
-    return;
-  }
-  // If email confirmation is required, there's no session yet — Supabase sends
-  // a one-time confirmation email (not a per-login link). Once confirmed, the
-  // same Sign In button above logs them in with their password from then on.
-  if (!data.session){
-    document.getElementById('loginMsg').textContent = 'Account created — check your email to confirm it, then sign in.';
-  }
-  // If confirmation isn't required, onAuthStateChange below signs them in immediately.
+const email = document.getElementById('loginEmail').value.trim();
+const password = document.getElementById('loginPassword').value;
+if (!email || !password){
+document.getElementById('loginMsg').textContent = 'Enter an email and password to create an account.';
+return;
+}
+if (password.length < 6){
+document.getElementById('loginMsg').textContent = 'Password must be at least 6 characters.';
+return;
+}
+document.getElementById('loginMsg').textContent = 'Creating accountâ¦';
+const { data, error } = await supa.auth.signUp({
+email,
+password,
+options: { emailRedirectTo: window.location.origin + '/app.html' }
+});
+if (error){
+document.getElementById('loginMsg').textContent = error.message;
+return;
+}
+// If email confirmation is required, there's no session yet â Supabase sends
+// a one-time confirmation email (not a per-login link). Once confirmed, the
+// same Sign In button above logs them in with their password from then on.
+if (!data.session){
+document.getElementById('loginMsg').textContent = 'Account created â check your email to confirm it, then sign in.';
+}
+// If confirmation isn't required, onAuthStateChange below signs them in immediately.
 });
 
 document.getElementById('forgotPasswordLink').addEventListener('click', async () => {
-  const email = document.getElementById('loginEmail').value.trim();
-  if (!email){
-    document.getElementById('loginMsg').textContent = 'Enter your email above first, then click "Forgot password?".';
-    return;
-  }
-  document.getElementById('loginMsg').textContent = 'Sending password reset email…';
-  const { error } = await supa.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
-  document.getElementById('loginMsg').textContent = error ? error.message : 'Check your email for a password reset link.';
+const email = document.getElementById('loginEmail').value.trim();
+if (!email){
+document.getElementById('loginMsg').textContent = 'Enter your email above first, then click "Forgot password?".';
+return;
+}
+document.getElementById('loginMsg').textContent = 'Sending password reset emailâ¦';
+const { error } = await supa.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/app.html' });
+document.getElementById('loginMsg').textContent = error ? error.message : 'Check your email for a password reset link.';
 });
 
 document.getElementById('loginPassword').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('signInBtn').click();
+if (e.key === 'Enter') document.getElementById('signInBtn').click();
 });
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
-  await supa.auth.signOut();
-  location.reload();
+await supa.auth.signOut();
+location.reload();
 });
 
 async function initAuth(){
-  const { data: { session } } = await supa.auth.getSession();
-  if (session){
-    currentUser = session.user;
-    await loadProfile();
-    showApp();
-  }
-  supa.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN'){ currentUser = session.user; loadProfile().then(showApp); }
-  });
+const { data: { session } } = await supa.auth.getSession();
+if (session){
+currentUser = session.user;
+await loadProfile();
+showApp();
+}
+supa.auth.onAuthStateChange((event, session) => {
+if (event === 'SIGNED_IN'){ currentUser = session.user; loadProfile().then(showApp); }
+});
 }
 
 async function loadProfile(){
-  const { data } = await supa.from('profiles').select('*').eq('id', currentUser.id).single();
-  currentProfile = data;
-  document.getElementById('creditsPill').textContent =
-    currentProfile.subscription_status === 'active' ? 'Unlimited (subscribed)' : `${currentProfile.credits_balance} credits`;
-  document.getElementById('planStatus').textContent =
-    currentProfile.subscription_status === 'active'
-      ? `Subscribed — ${currentProfile.subscription_plan || 'monthly plan'}`
-      : `Pay as you go — ${currentProfile.credits_balance} render credit(s) remaining`;
+const { data } = await supa.from('profiles').select('*').eq('id', currentUser.id).single();
+currentProfile = data;
+document.getElementById('creditsPill').textContent =
+currentProfile.subscription_status === 'active' ? 'Unlimited (subscribed)' : `${currentProfile.credits_balance} credits`;
+document.getElementById('planStatus').textContent =
+currentProfile.subscription_status === 'active'
+? `Subscribed â ${currentProfile.subscription_plan || 'monthly plan'}`
+: `Pay as you go â ${currentProfile.credits_balance} render credit(s) remaining`;
 }
 
 function showApp(){
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
-  loadHistory();
+document.getElementById('loginScreen').classList.add('hidden');
+document.getElementById('app').classList.remove('hidden');
+loadHistory();
 }
 
 // ---------- TABS ----------
 document.querySelectorAll('nav.tabs button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    ['render','history','billing'].forEach(t => {
-      document.getElementById('tab-' + t).classList.toggle('hidden', t !== btn.dataset.tab);
-    });
-    if (btn.dataset.tab === 'history') loadHistory();
-  });
+btn.addEventListener('click', () => {
+document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+btn.classList.add('active');
+['render','history','billing'].forEach(t => {
+document.getElementById('tab-' + t).classList.toggle('hidden', t !== btn.dataset.tab);
+});
+if (btn.dataset.tab === 'history') loadHistory();
+});
 });
 
 // ---------- COLOR SOURCE TOGGLE ----------
 document.getElementById('srcSearchBtn').addEventListener('click', () => {
-  document.getElementById('srcSearchBtn').classList.add('active');
-  document.getElementById('srcPromptBtn').classList.remove('active');
-  document.getElementById('searchPane').classList.remove('hidden');
-  document.getElementById('promptPane').classList.add('hidden');
+document.getElementById('srcSearchBtn').classList.add('active');
+document.getElementById('srcPromptBtn').classList.remove('active');
+document.getElementById('searchPane').classList.remove('hidden');
+document.getElementById('promptPane').classList.add('hidden');
 });
 document.getElementById('srcPromptBtn').addEventListener('click', () => {
-  document.getElementById('srcPromptBtn').classList.add('active');
-  document.getElementById('srcSearchBtn').classList.remove('active');
-  document.getElementById('promptPane').classList.remove('hidden');
-  document.getElementById('searchPane').classList.add('hidden');
+document.getElementById('srcPromptBtn').classList.add('active');
+document.getElementById('srcSearchBtn').classList.remove('active');
+document.getElementById('promptPane').classList.remove('hidden');
+document.getElementById('searchPane').classList.add('hidden');
 });
 
-// ---------- PAINT DB SEARCH (brand-first, via n8n proxy — CORS blocks direct calls) ----------
-// Docs: https://paintdb.com/api/v1  ->  GET /colors?q=&brand=&limit=
+// ---------- BRAND -> FAMILY -> COLORS PICKER (PaintDB via n8n proxy â CORS blocks direct calls) ----------
+// Docs: https://paintdb.com/api/v1 -> GET /colors?q=&brand=&family=&limit=&offset=
 const PAINT_BRANDS = [
-  {slug:'sherwin-williams', name:'Sherwin-Williams'}, {slug:'benjamin-moore', name:'Benjamin Moore'},
-  {slug:'behr', name:'Behr'}, {slug:'farrow-and-ball', name:'Farrow & Ball'}, {slug:'ppg', name:'PPG'},
-  {slug:'dulux', name:'Dulux'}, {slug:'valspar', name:'Valspar'}, {slug:'dunn-edwards', name:'Dunn-Edwards'},
-  {slug:'jotun', name:'Jotun'}, {slug:'nippon-paint', name:'Nippon Paint'}, {slug:'asian-paints', name:'Asian Paints'},
-  {slug:'little-greene', name:'Little Greene'}, {slug:'resene', name:'Resene'}, {slug:'c2-paint', name:'C2 Paint'},
-  {slug:'pratt-and-lambert', name:'Pratt & Lambert'}, {slug:'glidden', name:'Glidden'}, {slug:'kelly-moore', name:'Kelly-Moore Paints'},
-  {slug:'tikkurila', name:'Tikkurila'}, {slug:'crown-paint', name:'Crown Paints'}, {slug:'caparol', name:'Caparol'},
-  {slug:'berger', name:'Berger Paints'}, {slug:'nerolac', name:'Kansai Nerolac'}, {slug:'dulux-australia', name:'Dulux AU'},
-  {slug:'taubmans', name:'Taubmans'}, {slug:'plascon', name:'Plascon'}, {slug:'boysen', name:'Boysen'}, {slug:'hempel-deco', name:'Hempel Decorative'}
+{slug:'sherwin-williams', name:'Sherwin-Williams'}, {slug:'benjamin-moore', name:'Benjamin Moore'},
+{slug:'behr', name:'Behr'}, {slug:'farrow-and-ball', name:'Farrow & Ball'}, {slug:'ppg', name:'PPG'},
+{slug:'dulux', name:'Dulux'}, {slug:'valspar', name:'Valspar'}, {slug:'dunn-edwards', name:'Dunn-Edwards'},
+{slug:'jotun', name:'Jotun'}, {slug:'nippon-paint', name:'Nippon Paint'}, {slug:'asian-paints', name:'Asian Paints'},
+{slug:'little-greene', name:'Little Greene'}, {slug:'resene', name:'Resene'}, {slug:'c2-paint', name:'C2 Paint'},
+{slug:'pratt-and-lambert', name:'Pratt & Lambert'}, {slug:'glidden', name:'Glidden'}, {slug:'kelly-moore', name:'Kelly-Moore Paints'},
+{slug:'tikkurila', name:'Tikkurila'}, {slug:'crown-paint', name:'Crown Paints'}, {slug:'caparol', name:'Caparol'},
+{slug:'berger', name:'Berger Paints'}, {slug:'nerolac', name:'Kansai Nerolac'}, {slug:'dulux-australia', name:'Dulux AU'},
+{slug:'taubmans', name:'Taubmans'}, {slug:'plascon', name:'Plascon'}, {slug:'boysen', name:'Boysen'}, {slug:'hempel-deco', name:'Hempel Decorative'}
 ];
-const brandSelect = document.getElementById('colorBrand');
+
+// Representative swatch per family â decorative tile colors only (actual brand
+// colors are fetched from PaintDB once a family is picked). Ordered around the
+// color wheel with neutrals at the end, similar to Sherwin-Williams' Color Expert app.
+const COLOR_FAMILIES = [
+{slug:'red', name:'Red', hex:'#B3403C'},
+{slug:'orange', name:'Orange', hex:'#D98442'},
+{slug:'yellow', name:'Yellow', hex:'#E0C24A'},
+{slug:'green', name:'Green', hex:'#6B8F5D'},
+{slug:'blue', name:'Blue', hex:'#4C7DA8'},
+{slug:'purple', name:'Purple', hex:'#8067A0'},
+{slug:'pink', name:'Pink', hex:'#D98CA0'},
+{slug:'white', name:'White', hex:'#F5F3EF'},
+{slug:'beige', name:'Beige', hex:'#D9CBB5'},
+{slug:'gray', name:'Gray', hex:'#9CA3A8'},
+{slug:'brown', name:'Brown', hex:'#7B5B43'},
+{slug:'black', name:'Black', hex:'#2B2B2B'}
+];
+
+let selectedBrand = null;   // { slug, name } | null
+let selectedFamily = null;  // { slug, name } | null
+let colorsOffset = 0;
+let colorsTotal = 0;
+
+// ---- custom themed brand dropdown ----
+const brandSelectBtn = document.getElementById('brandSelectBtn');
+const brandSelectList = document.getElementById('brandSelectList');
+const brandSelectLabel = document.getElementById('brandSelectLabel');
+
 PAINT_BRANDS.slice().sort((a,b) => a.name.localeCompare(b.name)).forEach(b => {
-  const opt = document.createElement('option');
-  opt.value = b.slug; opt.textContent = b.name;
-  brandSelect.appendChild(opt);
+const opt = document.createElement('div');
+opt.className = 'opt';
+opt.textContent = b.name;
+opt.dataset.slug = b.slug;
+opt.addEventListener('click', () => {
+selectedBrand = b;
+brandSelectLabel.textContent = b.name;
+brandSelectList.classList.add('hidden');
+brandSelectBtn.classList.remove('open');
+document.querySelectorAll('#brandSelectList .opt').forEach(o => o.classList.toggle('active', o === opt));
+resetToFamilyStep();
+});
+brandSelectList.appendChild(opt);
 });
 
-async function fetchPaintDB(query, brand){
-  if (!brand) return [];
-  const params = new URLSearchParams({ brand, q: query || '' });
-  try {
-    const resp = await fetch(`${CONFIG.PAINTDB_PROXY}?${params.toString()}`);
-    const json = await resp.json();
-    return json.data || [];
-  } catch (e){
-    document.getElementById('selectedColorLine').textContent = 'Color search unavailable right now.';
-    return [];
-  }
-}
-function renderSwatches(list){
-  const grid = document.getElementById('swatchGrid');
-  grid.innerHTML = '';
-  list.forEach(c => {
-    const brandName = c.brand && c.brand.name ? c.brand.name : (c.brand || '');
-    const el = document.createElement('div');
-    el.className = 'swatch';
-    el.innerHTML = `<div class="fill" style="background:${c.hex}"></div>
-      <div class="meta"><span class="n">${c.name}</span><span class="c">${brandName} ${c.code||''}</span></div>`;
-    el.addEventListener('click', () => {
-      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected'));
-      el.classList.add('selected');
-      selectedColor = { hex: c.hex, name: c.name, code: c.code, brand: brandName };
-      document.getElementById('selectedColorLine').textContent = `Selected: ${brandName} ${c.name} (${c.hex})`;
-    });
-    grid.appendChild(el);
-  });
-}
-brandSelect.addEventListener('change', async () => {
-  const brand = brandSelect.value;
-  document.getElementById('colorSearch').value = '';
-  if (!brand){
-    document.getElementById('brandSearchStep').classList.add('hidden');
-    document.getElementById('swatchGrid').innerHTML = '';
-    return;
-  }
-  document.getElementById('brandSearchStep').classList.remove('hidden');
-  renderSwatches(await fetchPaintDB('', brand));
+brandSelectBtn.addEventListener('click', (e) => {
+e.stopPropagation();
+brandSelectList.classList.toggle('hidden');
+brandSelectBtn.classList.toggle('open');
 });
+document.addEventListener('click', (e) => {
+if (!document.getElementById('brandSelectWrap').contains(e.target)){
+brandSelectList.classList.add('hidden');
+brandSelectBtn.classList.remove('open');
+}
+});
+
+function resetToFamilyStep(){
+selectedFamily = null;
+selectedColor = null;
+document.getElementById('selectedColorLine').textContent = '';
+document.getElementById('familyStep').classList.remove('hidden');
+document.getElementById('colorsStep').classList.add('hidden');
+renderFamilyTiles();
+}
+
+function renderFamilyTiles(){
+const grid = document.getElementById('familyGrid');
+grid.innerHTML = '';
+COLOR_FAMILIES.forEach(fam => {
+const tile = document.createElement('div');
+tile.className = 'family-tile';
+tile.innerHTML = `<div class="swatch-fill" style="background:${fam.hex}"></div><div class="label">${fam.name}</div>`;
+tile.addEventListener('click', () => openFamily(fam));
+grid.appendChild(tile);
+});
+}
+
+function openFamily(fam){
+selectedFamily = fam;
+document.getElementById('familyStep').classList.add('hidden');
+document.getElementById('colorsStep').classList.remove('hidden');
+document.getElementById('familyStepLabel').textContent = `${selectedBrand.name} â ${fam.name}`;
+document.getElementById('colorSearch').value = '';
+document.getElementById('swatchGrid').innerHTML = '';
+colorsOffset = 0;
+colorsTotal = 0;
+loadColors(true);
+}
+
+document.getElementById('backToFamiliesBtn').addEventListener('click', () => {
+document.getElementById('colorsStep').classList.add('hidden');
+document.getElementById('familyStep').classList.remove('hidden');
+});
+
+async function fetchPaintDB(query, brand, family, offset){
+if (!brand) return { data: [], meta: { total: 0 } };
+const params = new URLSearchParams({ brand, q: query || '', family: family || '', offset: offset || 0, limit: 100 });
+try {
+const resp = await fetch(`${CONFIG.PAINTDB_PROXY}?${params.toString()}`);
+const json = await resp.json();
+return { data: json.data || [], meta: json.meta || { total: (json.data || []).length } };
+} catch (e){
+document.getElementById('selectedColorLine').textContent = 'Color search unavailable right now.';
+return { data: [], meta: { total: 0 } };
+}
+}
+
+function renderSwatches(list, append){
+const grid = document.getElementById('swatchGrid');
+if (!append) grid.innerHTML = '';
+list.forEach(c => {
+const brandName = c.brand && c.brand.name ? c.brand.name : (c.brand || '');
+const el = document.createElement('div');
+el.className = 'swatch';
+el.innerHTML = `<div class="fill" style="background:${c.hex}"></div>
+<div class="meta"><span class="n">${c.name}</span><span class="c">${brandName} ${c.code||''}</span></div>`;
+el.addEventListener('click', () => {
+document.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected'));
+el.classList.add('selected');
+selectedColor = { hex: c.hex, name: c.name, code: c.code, brand: brandName };
+document.getElementById('selectedColorLine').textContent = `Selected: ${brandName} ${c.name} (${c.hex})`;
+});
+grid.appendChild(el);
+});
+}
+
+async function loadColors(reset){
+if (reset) colorsOffset = 0;
+const q = document.getElementById('colorSearch').value;
+const result = await fetchPaintDB(q, selectedBrand.slug, selectedFamily.slug, colorsOffset);
+renderSwatches(result.data, !reset);
+colorsTotal = result.meta.total || 0;
+colorsOffset += result.data.length;
+const loadMoreBtn = document.getElementById('loadMoreBtn');
+loadMoreBtn.classList.toggle('hidden', colorsOffset >= colorsTotal || result.data.length === 0);
+}
+
+document.getElementById('loadMoreBtn').addEventListener('click', () => loadColors(false));
+
 let searchDebounce;
-document.getElementById('colorSearch').addEventListener('input', (e) => {
-  clearTimeout(searchDebounce);
-  const q = e.target.value;
-  const brand = brandSelect.value;
-  if (!brand) return;
-  searchDebounce = setTimeout(async () => {
-    renderSwatches(await fetchPaintDB(q, brand));
-  }, 300);
+document.getElementById('colorSearch').addEventListener('input', () => {
+clearTimeout(searchDebounce);
+searchDebounce = setTimeout(() => loadColors(true), 300);
 });
+
 document.getElementById('colorPrompt').addEventListener('input', (e) => {
-  selectedColor = null;
-  document.getElementById('selectedColorLine').textContent = e.target.value ? `Prompt: "${e.target.value}"` : '';
+selectedColor = null;
+document.getElementById('selectedColorLine').textContent = e.target.value ? `Prompt: "${e.target.value}"` : '';
 });
 
 // ---------- PHOTO UPLOAD ----------
 document.getElementById('uploadDrop').addEventListener('click', () => document.getElementById('photoInput').click());
 document.getElementById('photoInput').addEventListener('change', (e) => {
-  selectedFile = e.target.files[0];
-  if (!selectedFile) return;
-  const url = URL.createObjectURL(selectedFile);
-  document.getElementById('previewRow').innerHTML = `<img src="${url}">`;
+selectedFile = e.target.files[0];
+if (!selectedFile) return;
+const url = URL.createObjectURL(selectedFile);
+document.getElementById('previewRow').innerHTML = `<img src="${url}">`;
 });
 
 // ---------- SUBMIT RENDER ----------
 document.getElementById('submitRenderBtn').addEventListener('click', async () => {
-  const statusEl = document.getElementById('renderStatus');
-  if (!selectedFile){ statusEl.textContent = 'Upload a photo first.'; return; }
-  const promptText = document.getElementById('colorPrompt').value.trim();
-  if (!selectedColor && !promptText){ statusEl.textContent = 'Pick a color or describe one.'; return; }
+const statusEl = document.getElementById('renderStatus');
+if (!selectedFile){ statusEl.textContent = 'Upload a photo first.'; return; }
+const promptText = document.getElementById('colorPrompt').value.trim();
+if (!selectedColor && !promptText){ statusEl.textContent = 'Pick a color or describe one.'; return; }
 
-  const hasCredits = currentProfile.subscription_status === 'active' || currentProfile.credits_balance >= 1;
-  if (!hasCredits){
-    statusEl.textContent = "You're out of credits — buy a pack on the Billing tab.";
-    return;
-  }
+const hasCredits = currentProfile.subscription_status === 'active' || currentProfile.credits_balance >= 1;
+if (!hasCredits){
+statusEl.textContent = "You're out of credits â buy a pack on the Billing tab.";
+return;
+}
 
-  statusEl.textContent = 'Uploading photo…';
-  const path = `${currentUser.id}/${Date.now()}_${selectedFile.name}`;
-  const { data: uploadData, error: uploadErr } = await supa.storage.from(CONFIG.PHOTOS_BUCKET).upload(path, selectedFile);
-  if (uploadErr){ statusEl.textContent = 'Upload failed: ' + uploadErr.message; return; }
-  const { data: { publicUrl } } = supa.storage.from(CONFIG.PHOTOS_BUCKET).getPublicUrl(path);
+statusEl.textContent = 'Uploading photoâ¦';
+const path = `${currentUser.id}/${Date.now()}_${selectedFile.name}`;
+const { data: uploadData, error: uploadErr } = await supa.storage.from(CONFIG.PHOTOS_BUCKET).upload(path, selectedFile);
+if (uploadErr){ statusEl.textContent = 'Upload failed: ' + uploadErr.message; return; }
+const { data: { publicUrl } } = supa.storage.from(CONFIG.PHOTOS_BUCKET).getPublicUrl(path);
 
-  const { data: renderRow, error: renderErr } = await supa.from('renders').insert({
-    user_id: currentUser.id,
-    original_photo_url: publicUrl,
-    color_hex: selectedColor ? selectedColor.hex : null,
-    color_name: selectedColor ? `${selectedColor.brand} ${selectedColor.name}${selectedColor.code ? ' ('+selectedColor.code+')' : ''}` : null,
-    prompt: selectedColor ? null : promptText,
-    status: 'processing'
-  }).select().single();
-  if (renderErr){ statusEl.textContent = 'Could not start render: ' + renderErr.message; return; }
-  currentRenderId = renderRow.id;
-  correctionsUsed = 0;
+const { data: renderRow, error: renderErr } = await supa.from('renders').insert({
+user_id: currentUser.id,
+original_photo_url: publicUrl,
+color_hex: selectedColor ? selectedColor.hex : null,
+color_name: selectedColor ? `${selectedColor.brand} ${selectedColor.name}${selectedColor.code ? ' ('+selectedColor.code+')' : ''}` : null,
+prompt: selectedColor ? null : promptText,
+status: 'processing'
+}).select().single();
+if (renderErr){ statusEl.textContent = 'Could not start render: ' + renderErr.message; return; }
+currentRenderId = renderRow.id;
+correctionsUsed = 0;
 
-  statusEl.textContent = 'Rendering — this takes about 10 seconds…';
+statusEl.textContent = 'Rendering â this takes about 10 secondsâ¦';
 
-  // Call your n8n webhook. n8n should: run Dezgo Flux 2, apply the
-  // LAB color-correction pass toward color_hex, overlay the account's
-  // logo/contact, upload the result to Supabase Storage, then update
-  // this renders row (status, rendered_photo_url, branded_photo_url)
-  // using the service-role key.
-  try {
-    const resp = await fetch(CONFIG.N8N_RENDER_WEBHOOK, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        render_id: renderRow.id,
-        user_id: currentUser.id,
-        photo_url: publicUrl,
-        color_hex: selectedColor ? selectedColor.hex : null,
-        color_name: selectedColor ? `${selectedColor.brand} ${selectedColor.name}` : null,
-        prompt: selectedColor ? null : promptText,
-        brand_logo_url: currentProfile.brand_logo_url,
-        brand_contact: currentProfile.brand_contact
-      })
-    });
-    if (!resp.ok) throw new Error('Webhook returned ' + resp.status);
-  } catch (e){
-    statusEl.textContent = 'Render request failed: ' + e.message;
-    return;
-  }
+// Call your n8n webhook. n8n should: run Dezgo Flux 2, apply the
+// LAB color-correction pass toward color_hex, overlay the account's
+// logo/contact, upload the result to Supabase Storage, then update
+// this renders row (status, rendered_photo_url, branded_photo_url)
+// using the service-role key.
+try {
+const resp = await fetch(CONFIG.N8N_RENDER_WEBHOOK, {
+method: 'POST',
+headers: {'Content-Type':'application/json'},
+body: JSON.stringify({
+render_id: renderRow.id,
+user_id: currentUser.id,
+photo_url: publicUrl,
+color_hex: selectedColor ? selectedColor.hex : null,
+color_name: selectedColor ? `${selectedColor.brand} ${selectedColor.name}` : null,
+prompt: selectedColor ? null : promptText,
+brand_logo_url: currentProfile.brand_logo_url,
+brand_contact: currentProfile.brand_contact
+})
+});
+if (!resp.ok) throw new Error('Webhook returned ' + resp.status);
+} catch (e){
+statusEl.textContent = 'Render request failed: ' + e.message;
+return;
+}
 
-  pollForResult(renderRow.id);
+pollForResult(renderRow.id);
 });
 
 async function pollForResult(renderId){
-  const statusEl = document.getElementById('renderStatus');
-  const interval = setInterval(async () => {
-    const { data } = await supa.from('renders').select('*').eq('id', renderId).single();
-    if (data.status === 'done'){
-      clearInterval(interval);
-      statusEl.textContent = '';
-      document.getElementById('renderResult').classList.remove('hidden');
-      document.getElementById('renderImg').src = data.branded_photo_url || data.rendered_photo_url;
-      document.getElementById('correctionsLeft').textContent =
-        `${Math.max(0, CONFIG.FREE_CORRECTIONS - data.corrections_used)} free correction(s) left`;
-      loadProfile(); // refresh credit balance
-    } else if (data.status === 'failed'){
-      clearInterval(interval);
-      statusEl.textContent = 'Render failed — try again.';
-    }
-  }, 2500);
+const statusEl = document.getElementById('renderStatus');
+const interval = setInterval(async () => {
+const { data } = await supa.from('renders').select('*').eq('id', renderId).single();
+if (data.status === 'done'){
+clearInterval(interval);
+statusEl.textContent = '';
+document.getElementById('renderResult').classList.remove('hidden');
+document.getElementById('renderImg').src = data.branded_photo_url || data.rendered_photo_url;
+document.getElementById('correctionsLeft').textContent =
+`${Math.max(0, CONFIG.FREE_CORRECTIONS - data.corrections_used)} free correction(s) left`;
+loadProfile(); // refresh credit balance
+} else if (data.status === 'failed'){
+clearInterval(interval);
+statusEl.textContent = 'Render failed â try again.';
+}
+}, 2500);
 }
 
 // ---------- CORRECTIONS ----------
 document.getElementById('correctionBtn').addEventListener('click', async () => {
-  const text = document.getElementById('correctionInput').value.trim();
-  if (!text || !currentRenderId) return;
-  document.getElementById('renderStatus').textContent = 'Applying correction…';
-  await fetch(CONFIG.N8N_RENDER_WEBHOOK, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      render_id: currentRenderId,
-      user_id: currentUser.id,
-      correction_prompt: text,
-      brand_logo_url: currentProfile.brand_logo_url,
-      brand_contact: currentProfile.brand_contact
-    })
-  });
-  document.getElementById('correctionInput').value = '';
-  pollForResult(currentRenderId);
+const text = document.getElementById('correctionInput').value.trim();
+if (!text || !currentRenderId) return;
+document.getElementById('renderStatus').textContent = 'Applying correctionâ¦';
+await fetch(CONFIG.N8N_RENDER_WEBHOOK, {
+method: 'POST',
+headers: {'Content-Type':'application/json'},
+body: JSON.stringify({
+render_id: currentRenderId,
+user_id: currentUser.id,
+correction_prompt: text,
+brand_logo_url: currentProfile.brand_logo_url,
+brand_contact: currentProfile.brand_contact
+})
+});
+document.getElementById('correctionInput').value = '';
+pollForResult(currentRenderId);
 });
 
 // ---------- DOWNLOAD ----------
 document.getElementById('downloadBtn').addEventListener('click', () => {
-  const img = document.getElementById('renderImg');
-  const a = document.createElement('a');
-  a.href = img.src;
-  a.download = 'paintrz-render.jpg';
-  a.click();
+const img = document.getElementById('renderImg');
+const a = document.createElement('a');
+a.href = img.src;
+a.download = 'paintrz-render.jpg';
+a.click();
 });
 
 // ---------- HISTORY ----------
 async function loadHistory(){
-  const { data } = await supa.from('renders').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
-  const grid = document.getElementById('historyGrid');
-  grid.innerHTML = '';
-  (data || []).forEach(r => {
-    const el = document.createElement('div');
-    el.className = 'history-item';
-    const img = r.branded_photo_url || r.rendered_photo_url || r.original_photo_url;
-    el.innerHTML = `<img src="${img}"><div class="meta">${new Date(r.created_at).toLocaleDateString()} · ${r.status}</div>`;
-    el.addEventListener('click', () => window.open(img, '_blank'));
-    grid.appendChild(el);
-  });
+const { data } = await supa.from('renders').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+const grid = document.getElementById('historyGrid');
+grid.innerHTML = '';
+(data || []).forEach(r => {
+const el = document.createElement('div');
+el.className = 'history-item';
+const img = r.branded_photo_url || r.rendered_photo_url || r.original_photo_url;
+el.innerHTML = `<img src="${img}"><div class="meta">${new Date(r.created_at).toLocaleDateString()} Â· ${r.status}</div>`;
+el.addEventListener('click', () => window.open(img, '_blank'));
+grid.appendChild(el);
+});
 }
 
 // ---------- BILLING ----------
 document.querySelectorAll('.tier-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    // client_reference_id lets your Stripe webhook know which account to credit
-    window.location.href = `${btn.dataset.link}?client_reference_id=${currentUser.id}`;
-  });
+btn.addEventListener('click', () => {
+// client_reference_id lets your Stripe webhook know which account to credit
+window.location.href = `${btn.dataset.link}?client_reference_id=${currentUser.id}`;
+});
 });
 
 initAuth();
