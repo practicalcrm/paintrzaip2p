@@ -94,7 +94,7 @@ label.field{display:block; font-size:12px; color:var(--muted); margin-bottom:6px
 <body>
 
 <!-- ============================================================
-CONFIG â fill these in before deploying. Nothing else in this
+CONFIG — fill these in before deploying. Nothing else in this
 file needs to change to go live once these are set.
 ============================================================ -->
 <script>
@@ -102,7 +102,7 @@ const CONFIG = {
 SUPABASE_URL: "https://pwkrwyemkjlmjdacelyi.supabase.co",
 SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3a3J3eWVta2psbWpkYWNlbHlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzODM0NzcsImV4cCI6MjEwMTk1OTQ3N30.fwJviU13Q967H145Czqg9ocfl4vlVDnjRewaADWxWFw",
 N8N_RENDER_WEBHOOK: "https://n8n-production-e390.up.railway.app/webhook/paintrz-render",
-PAINTDB_API: "https://paintdb.com/api/v1", // free, no key required â see https://paintdb.com/api/v1
+PAINTDB_API: "https://paintdb.com/api/v1", // free, no key required — see https://paintdb.com/api/v1
 PAINTDB_PROXY: "https://n8n-production-e390.up.railway.app/webhook/paintrz-colors",
 RENDER_COST_CENTS: 85,
 FREE_CORRECTIONS: 2,
@@ -130,7 +130,7 @@ PHOTOS_BUCKET: "photos"
 <div class="wrap">
 <div class="brand">PAINTR<span class="z">Z</span></div>
 <div style="display:flex; align-items:center; gap:12px;">
-<span class="credits-pill" id="creditsPill">â credits</span>
+<span class="credits-pill" id="creditsPill">— credits</span>
 <button class="btn btn-ghost" id="logoutBtn">Log out</button>
 </div>
 </div>
@@ -154,25 +154,25 @@ PHOTOS_BUCKET: "photos"
 
 <div id="searchPane">
 <!-- Step 1: brand (custom themed dropdown) -->
-<label class="field">Step 1 â Brand</label>
+<label class="field">Step 1 — Brand</label>
 <div class="custom-select" id="brandSelectWrap">
-<button type="button" class="custom-select-btn" id="brandSelectBtn"><span id="brandSelectLabel">Choose a paint brandâ¦</span><span class="chev">â¾</span></button>
+<button type="button" class="custom-select-btn" id="brandSelectBtn"><span id="brandSelectLabel">Choose a paint brand…</span><span class="chev">▾</span></button>
 <div class="custom-select-list hidden" id="brandSelectList"></div>
 </div>
 
 <!-- Step 2: color family tiles -->
 <div id="familyStep" class="hidden">
-<label class="field" style="margin-top:16px;">Step 2 â Color family</label>
+<label class="field" style="margin-top:16px;">Step 2 — Color family</label>
 <div class="family-grid" id="familyGrid"></div>
 </div>
 
 <!-- Step 3: colors within the chosen family -->
 <div id="colorsStep" class="hidden" style="margin-top:16px;">
 <div class="colors-step-header">
-<button type="button" class="btn btn-ghost" id="backToFamiliesBtn">â¹ Back to families</button>
+<button type="button" class="btn btn-ghost" id="backToFamiliesBtn">‹ Back to families</button>
 <span class="status-line" id="familyStepLabel" style="margin:0;"></span>
 </div>
-<input type="text" id="colorSearch" placeholder="Search within this familyâ¦ (name or code)">
+<input type="text" id="colorSearch" placeholder="Search within this family… (name or code)">
 <div class="swatch-grid" id="swatchGrid"></div>
 <button type="button" class="btn btn-ghost hidden" id="loadMoreBtn">Load more colors</button>
 </div>
@@ -192,7 +192,7 @@ PHOTOS_BUCKET: "photos"
 </div>
 
 <div class="card">
-<button class="btn btn-primary" id="submitRenderBtn">Generate render â 85Â¢</button>
+<button class="btn btn-primary" id="submitRenderBtn">Generate render — 85¢</button>
 <div class="status-line" id="renderStatus"></div>
 <div class="render-result hidden" id="renderResult">
 <img id="renderImg">
@@ -217,31 +217,31 @@ PHOTOS_BUCKET: "photos"
 <section id="tab-billing" class="hidden">
 <div class="card">
 <h3 style="margin-bottom:8px;">Current plan</h3>
-<p class="status-line" id="planStatus">â</p>
+<p class="status-line" id="planStatus">—</p>
 </div>
 <div class="plan-cards" style="flex-wrap:wrap;">
 <div class="card" style="min-width:180px;">
 <h3>Pay As You Go</h3>
-<p class="status-line">85Â¢ / render, no commitment.</p>
+<p class="status-line">85¢ / render, no commitment.</p>
 <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/3cI5kD7yVfuk9JE9AEbfO01" style="margin-top:14px; width:100%;">Buy renders</button>
 </div>
 <div class="card" style="min-width:180px;">
-<h3>Starter â $5/mo</h3>
+<h3>Starter — $5/mo</h3>
 <p class="status-line">7 renders / month.</p>
 <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/fZu4gzaL7fuk4pkfZ2bfO00" style="margin-top:14px; width:100%;">Subscribe</button>
 </div>
 <div class="card" style="min-width:180px;">
-<h3>Crew â $10/mo</h3>
+<h3>Crew — $10/mo</h3>
 <p class="status-line">16 renders / month.</p>
 <button class="btn btn-primary tier-btn" data-link="https://buy.stripe.com/fZubJ12eB95W2hc004bfO02" style="margin-top:14px; width:100%;">Subscribe</button>
 </div>
 <div class="card" style="min-width:180px;">
-<h3>Pro â $20/mo</h3>
+<h3>Pro — $20/mo</h3>
 <p class="status-line">35 renders / month.</p>
 <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/bJebJ13iFbe4dZUeUYbfO03" style="margin-top:14px; width:100%;">Subscribe</button>
 </div>
 <div class="card" style="min-width:180px;">
-<h3>Studio â $40/mo</h3>
+<h3>Studio — $40/mo</h3>
 <p class="status-line">80 renders / month.</p>
 <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/fZu28rdXjeqg9JE004bfO04" style="margin-top:14px; width:100%;">Subscribe</button>
 </div>
@@ -267,7 +267,7 @@ if (!email || !password){
 document.getElementById('loginMsg').textContent = 'Enter your email and password.';
 return;
 }
-document.getElementById('loginMsg').textContent = 'Signing inâ¦';
+document.getElementById('loginMsg').textContent = 'Signing in…';
 const { error } = await supa.auth.signInWithPassword({ email, password });
 if (error){
 document.getElementById('loginMsg').textContent = error.message;
@@ -286,7 +286,7 @@ if (password.length < 6){
 document.getElementById('loginMsg').textContent = 'Password must be at least 6 characters.';
 return;
 }
-document.getElementById('loginMsg').textContent = 'Creating accountâ¦';
+document.getElementById('loginMsg').textContent = 'Creating account…';
 const { data, error } = await supa.auth.signUp({
 email,
 password,
@@ -296,11 +296,11 @@ if (error){
 document.getElementById('loginMsg').textContent = error.message;
 return;
 }
-// If email confirmation is required, there's no session yet â Supabase sends
+// If email confirmation is required, there's no session yet — Supabase sends
 // a one-time confirmation email (not a per-login link). Once confirmed, the
 // same Sign In button above logs them in with their password from then on.
 if (!data.session){
-document.getElementById('loginMsg').textContent = 'Account created â check your email to confirm it, then sign in.';
+document.getElementById('loginMsg').textContent = 'Account created — check your email to confirm it, then sign in.';
 }
 // If confirmation isn't required, onAuthStateChange below signs them in immediately.
 });
@@ -311,7 +311,7 @@ if (!email){
 document.getElementById('loginMsg').textContent = 'Enter your email above first, then click "Forgot password?".';
 return;
 }
-document.getElementById('loginMsg').textContent = 'Sending password reset emailâ¦';
+document.getElementById('loginMsg').textContent = 'Sending password reset email…';
 const { error } = await supa.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/app.html' });
 document.getElementById('loginMsg').textContent = error ? error.message : 'Check your email for a password reset link.';
 });
@@ -344,8 +344,8 @@ document.getElementById('creditsPill').textContent =
 currentProfile.subscription_status === 'active' ? 'Unlimited (subscribed)' : `${currentProfile.credits_balance} credits`;
 document.getElementById('planStatus').textContent =
 currentProfile.subscription_status === 'active'
-? `Subscribed â ${currentProfile.subscription_plan || 'monthly plan'}`
-: `Pay as you go â ${currentProfile.credits_balance} render credit(s) remaining`;
+? `Subscribed — ${currentProfile.subscription_plan || 'monthly plan'}`
+: `Pay as you go — ${currentProfile.credits_balance} render credit(s) remaining`;
 }
 
 function showApp(){
@@ -380,7 +380,7 @@ document.getElementById('promptPane').classList.remove('hidden');
 document.getElementById('searchPane').classList.add('hidden');
 });
 
-// ---------- BRAND -> FAMILY -> COLORS PICKER (PaintDB via n8n proxy â CORS blocks direct calls) ----------
+// ---------- BRAND -> FAMILY -> COLORS PICKER (PaintDB via n8n proxy — CORS blocks direct calls) ----------
 // Docs: https://paintdb.com/api/v1 -> GET /colors?q=&brand=&family=&limit=&offset=
 const PAINT_BRANDS = [
 {slug:'sherwin-williams', name:'Sherwin-Williams'}, {slug:'benjamin-moore', name:'Benjamin Moore'},
@@ -394,7 +394,7 @@ const PAINT_BRANDS = [
 {slug:'taubmans', name:'Taubmans'}, {slug:'plascon', name:'Plascon'}, {slug:'boysen', name:'Boysen'}, {slug:'hempel-deco', name:'Hempel Decorative'}
 ];
 
-// Representative swatch per family â decorative tile colors only (actual brand
+// Representative swatch per family — decorative tile colors only (actual brand
 // colors are fetched from PaintDB once a family is picked). Ordered around the
 // color wheel with neutrals at the end, similar to Sherwin-Williams' Color Expert app.
 const COLOR_FAMILIES = [
@@ -475,7 +475,7 @@ function openFamily(fam){
 selectedFamily = fam;
 document.getElementById('familyStep').classList.add('hidden');
 document.getElementById('colorsStep').classList.remove('hidden');
-document.getElementById('familyStepLabel').textContent = `${selectedBrand.name} â ${fam.name}`;
+document.getElementById('familyStepLabel').textContent = `${selectedBrand.name} — ${fam.name}`;
 document.getElementById('colorSearch').value = '';
 document.getElementById('swatchGrid').innerHTML = '';
 colorsOffset = 0;
@@ -562,11 +562,11 @@ if (!selectedColor && !promptText){ statusEl.textContent = 'Pick a color or desc
 
 const hasCredits = currentProfile.subscription_status === 'active' || currentProfile.credits_balance >= 1;
 if (!hasCredits){
-statusEl.textContent = "You're out of credits â buy a pack on the Billing tab.";
+statusEl.textContent = "You're out of credits — buy a pack on the Billing tab.";
 return;
 }
 
-statusEl.textContent = 'Uploading photoâ¦';
+statusEl.textContent = 'Uploading photo…';
 const path = `${currentUser.id}/${Date.now()}_${selectedFile.name}`;
 const { data: uploadData, error: uploadErr } = await supa.storage.from(CONFIG.PHOTOS_BUCKET).upload(path, selectedFile);
 if (uploadErr){ statusEl.textContent = 'Upload failed: ' + uploadErr.message; return; }
@@ -584,7 +584,7 @@ if (renderErr){ statusEl.textContent = 'Could not start render: ' + renderErr.me
 currentRenderId = renderRow.id;
 correctionsUsed = 0;
 
-statusEl.textContent = 'Rendering â this takes about 10 secondsâ¦';
+statusEl.textContent = 'Rendering — this takes about 10 seconds…';
 
 // Call your n8n webhook. n8n should: run Dezgo Flux 2, apply the
 // LAB color-correction pass toward color_hex, overlay the account's
@@ -629,7 +629,7 @@ document.getElementById('correctionsLeft').textContent =
 loadProfile(); // refresh credit balance
 } else if (data.status === 'failed'){
 clearInterval(interval);
-statusEl.textContent = 'Render failed â try again.';
+statusEl.textContent = 'Render failed — try again.';
 }
 }, 2500);
 }
@@ -638,7 +638,7 @@ statusEl.textContent = 'Render failed â try again.';
 document.getElementById('correctionBtn').addEventListener('click', async () => {
 const text = document.getElementById('correctionInput').value.trim();
 if (!text || !currentRenderId) return;
-document.getElementById('renderStatus').textContent = 'Applying correctionâ¦';
+document.getElementById('renderStatus').textContent = 'Applying correction…';
 await fetch(CONFIG.N8N_RENDER_WEBHOOK, {
 method: 'POST',
 headers: {'Content-Type':'application/json'},
@@ -672,7 +672,7 @@ grid.innerHTML = '';
 const el = document.createElement('div');
 el.className = 'history-item';
 const img = r.branded_photo_url || r.rendered_photo_url || r.original_photo_url;
-el.innerHTML = `<img src="${img}"><div class="meta">${new Date(r.created_at).toLocaleDateString()} Â· ${r.status}</div>`;
+el.innerHTML = `<img src="${img}"><div class="meta">${new Date(r.created_at).toLocaleDateString()} · ${r.status}</div>`;
 el.addEventListener('click', () => window.open(img, '_blank'));
 grid.appendChild(el);
 });
