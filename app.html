@@ -88,7 +88,6 @@ label.field{display:block; font-size:12px; color:var(--muted); margin-bottom:6px
 .colors-step-header{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
 .colors-step-header .btn{padding:8px 14px; font-size:13px;}
 #colorSearch{width:100%; margin-bottom:4px;}
-#loadMoreBtn{width:100%; margin-top:12px;}
 </style>
 </head>
 <body>
@@ -174,7 +173,6 @@ PHOTOS_BUCKET: "photos"
 </div>
 <input type="text" id="colorSearch" placeholder="Search within this family… (name or code)">
 <div class="swatch-grid" id="swatchGrid"></div>
-<button type="button" class="btn btn-ghost hidden" id="loadMoreBtn">Load more colors</button>
 </div>
 </div>
 
@@ -414,8 +412,6 @@ const COLOR_FAMILIES = [
 
 let selectedBrand = null;   // { slug, name } | null
 let selectedFamily = null;  // { slug, name } | null
-let colorsOffset = 0;
-let colorsTotal = 0;
 
 // ---- custom themed brand dropdown ----
 const brandSelectBtn = document.getElementById('brandSelectBtn');
@@ -478,9 +474,7 @@ document.getElementById('colorsStep').classList.remove('hidden');
 document.getElementById('familyStepLabel').textContent = `${selectedBrand.name} — ${fam.name}`;
 document.getElementById('colorSearch').value = '';
 document.getElementById('swatchGrid').innerHTML = '';
-colorsOffset = 0;
-colorsTotal = 0;
-loadColors(true);
+loadColors();
 }
 
 document.getElementById('backToFamiliesBtn').addEventListener('click', () => {
@@ -520,23 +514,55 @@ grid.appendChild(el);
 });
 }
 
-async function loadColors(reset){
-if (reset) colorsOffset = 0;
-const q = document.getElementById('colorSearch').value;
-const result = await fetchPaintDB(q, selectedBrand.slug, selectedFamily.slug, colorsOffset);
-renderSwatches(result.data, !reset);
-colorsTotal = result.meta.total || 0;
-colorsOffset += result.data.length;
-const loadMoreBtn = document.getElementById('loadMoreBtn');
-loadMoreBtn.classList.toggle('hidden', colorsOffset >= colorsTotal || result.data.length === 0);
+// PaintDB returns an `hsl` field on every color. Hue groups similar tones
+// together, so sorting on it is what makes scrolling move smoothly through
+// the family instead of jumping around PaintDB's own (brand-clustered) order.
+function colorSortKey(c){
+const h = (c.hsl && typeof c.hsl.h === 'number') ? c.hsl.h : 0;
+const s = (c.hsl && typeof c.hsl.s === 'number') ? c.hsl.s : 0;
+const l = (c.hsl && typeof c.hsl.l === 'number') ? c.hsl.l : 0;
+return { h, s, l };
 }
 
-document.getElementById('loadMoreBtn').addEventListener('click', () => loadColors(false));
+// Guards against a slow multi-page load finishing after the user has already
+// moved on to another family or typed a new search.
+let colorsRequestToken = 0;
+
+// Pulls every page for the current brand+family up front (a big family like
+// Sherwin-Williams blue is ~253 colors = 3 requests), sorts the whole set,
+// then renders it in one shot.
+async function loadColors(){
+const token = ++colorsRequestToken;
+const q = document.getElementById('colorSearch').value;
+const grid = document.getElementById('swatchGrid');
+grid.innerHTML = '<div class="status-line" style="grid-column:1/-1; margin:0;">Loading colors…</div>';
+
+const all = [];
+let offset = 0, total = 0;
+do {
+const result = await fetchPaintDB(q, selectedBrand.slug, selectedFamily.slug, offset);
+if (token !== colorsRequestToken) return; // superseded — drop this response
+if (!result.data.length) break;           // also stops a bad total from looping forever
+all.push(...result.data);
+total = result.meta.total || all.length;
+offset += result.data.length;
+} while (offset < total);
+
+all.sort((a, b) => {
+const ka = colorSortKey(a), kb = colorSortKey(b);
+if (ka.h !== kb.h) return ka.h - kb.h;  // group by hue
+if (kb.s !== ka.s) return kb.s - ka.s;  // vivid before muted within a hue
+return ka.l - kb.l;                     // dark before pale as the tiebreaker
+});
+
+renderSwatches(all, false);
+if (!all.length) grid.innerHTML = '<div class="status-line" style="grid-column:1/-1; margin:0;">No colors found.</div>';
+}
 
 let searchDebounce;
 document.getElementById('colorSearch').addEventListener('input', () => {
 clearTimeout(searchDebounce);
-searchDebounce = setTimeout(() => loadColors(true), 300);
+searchDebounce = setTimeout(() => loadColors(), 300);
 });
 
 document.getElementById('colorPrompt').addEventListener('input', (e) => {
