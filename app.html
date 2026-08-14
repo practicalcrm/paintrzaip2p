@@ -482,16 +482,22 @@ document.getElementById('colorsStep').classList.add('hidden');
 document.getElementById('familyStep').classList.remove('hidden');
 });
 
+// PaintDB caps a single response at 100 rows, so anything bigger is paginated.
+const COLORS_PAGE_SIZE = 100;
+
+// `ok` lets the caller tell "this page genuinely has no colors" apart from
+// "this page failed" — without it a dropped request silently truncates a family.
 async function fetchPaintDB(query, brand, family, offset){
-if (!brand) return { data: [], meta: { total: 0 } };
-const params = new URLSearchParams({ brand, q: query || '', family: family || '', offset: offset || 0, limit: 100 });
+if (!brand) return { data: [], meta: { total: 0 }, ok: true };
+const params = new URLSearchParams({ brand, q: query || '', family: family || '', offset: offset || 0, limit: COLORS_PAGE_SIZE });
 try {
 const resp = await fetch(`${CONFIG.PAINTDB_PROXY}?${params.toString()}`);
+if (!resp.ok) throw new Error('proxy returned ' + resp.status);
 const json = await resp.json();
-return { data: json.data || [], meta: json.meta || { total: (json.data || []).length } };
+return { data: json.data || [], meta: json.meta || { total: (json.data || []).length }, ok: true };
 } catch (e){
 document.getElementById('selectedColorLine').textContent = 'Color search unavailable right now.';
-return { data: [], meta: { total: 0 } };
+return { data: [], meta: { total: 0 }, ok: false };
 }
 }
 
@@ -528,25 +534,44 @@ return { h, s, l };
 // moved on to another family or typed a new search.
 let colorsRequestToken = 0;
 
-// Pulls every page for the current brand+family up front (a big family like
-// Sherwin-Williams blue is ~253 colors = 3 requests), sorts the whole set,
-// then renders it in one shot.
+// Pulls EVERY page for the current brand+family, sorts the whole set, then
+// renders it in one shot. The first request tells us the real total, so the
+// remaining pages all go out at once — a big family (Behr green = 619 colors,
+// 7 requests) takes ~2s in parallel vs ~11s one after another.
 async function loadColors(){
 const token = ++colorsRequestToken;
 const q = document.getElementById('colorSearch').value;
+const brand = selectedBrand.slug, family = selectedFamily.slug;
 const grid = document.getElementById('swatchGrid');
+const label = document.getElementById('familyStepLabel');
 grid.innerHTML = '<div class="status-line" style="grid-column:1/-1; margin:0;">Loading colors…</div>';
 
-const all = [];
-let offset = 0, total = 0;
-do {
-const result = await fetchPaintDB(q, selectedBrand.slug, selectedFamily.slug, offset);
+const first = await fetchPaintDB(q, brand, family, 0);
 if (token !== colorsRequestToken) return; // superseded — drop this response
-if (!result.data.length) break;           // also stops a bad total from looping forever
-all.push(...result.data);
-total = result.meta.total || all.length;
-offset += result.data.length;
-} while (offset < total);
+const total = first.meta.total || first.data.length;
+
+const offsets = [];
+for (let o = COLORS_PAGE_SIZE; o < total; o += COLORS_PAGE_SIZE) offsets.push(o);
+let pages = await Promise.all(offsets.map(o => fetchPaintDB(q, brand, family, o)));
+if (token !== colorsRequestToken) return;
+
+// Give any page that failed one more try, so a single flaky request doesn't
+// quietly drop 100 colors out of the middle of the family.
+const failed = offsets.map((o, i) => pages[i].ok ? -1 : i).filter(i => i >= 0);
+if (failed.length){
+const retried = await Promise.all(failed.map(i => fetchPaintDB(q, brand, family, offsets[i])));
+if (token !== colorsRequestToken) return;
+failed.forEach((pageIdx, k) => { pages[pageIdx] = retried[k]; });
+}
+
+// Dedupe by id — offset paging can repeat a row if the upstream order shifts.
+const seen = new Set(), all = [];
+[first].concat(pages).forEach(p => p.data.forEach(c => {
+const key = c.id || `${c.code || ''}|${c.hex || ''}`;
+if (seen.has(key)) return;
+seen.add(key);
+all.push(c);
+}));
 
 all.sort((a, b) => {
 const ka = colorSortKey(a), kb = colorSortKey(b);
@@ -556,7 +581,12 @@ return ka.l - kb.l;                     // dark before pale as the tiebreaker
 });
 
 renderSwatches(all, false);
-if (!all.length) grid.innerHTML = '<div class="status-line" style="grid-column:1/-1; margin:0;">No colors found.</div>';
+if (!all.length){
+grid.innerHTML = '<div class="status-line" style="grid-column:1/-1; margin:0;">No colors found.</div>';
+}
+// Show the count so a short load is visible rather than silently partial.
+label.textContent = `${selectedBrand.name} — ${selectedFamily.name} · ` +
+(all.length < total ? `${all.length} of ${total} colors (some failed to load)` : `${all.length} colors`);
 }
 
 let searchDebounce;
