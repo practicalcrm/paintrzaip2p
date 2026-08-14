@@ -83,7 +83,7 @@ label.field{display:block; font-size:12px; color:var(--muted); margin-bottom:6px
 .family-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:10px; margin-top:12px;}
 .family-tile{border-radius:10px; overflow:hidden; cursor:pointer; border:1px solid var(--line); background:var(--panel); transition:transform .1s, border-color .1s;}
 .family-tile:hover{border-color:var(--teal); transform:translateY(-1px);}
-.family-tile .swatch-fill{height:52px;}
+.family-tile .mini-grid{display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:2px; height:52px;} .family-tile .mini-grid div{width:100%; height:100%;}
 .family-tile .label{padding:8px 6px; font-size:11.5px; font-weight:600; text-align:center;}
 .colors-step-header{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
 .colors-step-header .btn{padding:8px 14px; font-size:13px;}
@@ -398,18 +398,18 @@ const PAINT_BRANDS = [
 // colors are fetched from PaintDB once a family is picked). Ordered around the
 // color wheel with neutrals at the end, similar to Sherwin-Williams' Color Expert app.
 const COLOR_FAMILIES = [
-{slug:'red', name:'Red Base', gradient:'linear-gradient(90deg, #F2D6D4, #B3403C, #5C1A17)'},
-{slug:'orange', name:'Orange Base', gradient:'linear-gradient(90deg, #F5DCC2, #D98442, #7A431C)'},
-{slug:'yellow', name:'Yellow Base', gradient:'linear-gradient(90deg, #F7EFC2, #E0C24A, #8A6A12)'},
-{slug:'green', name:'Green Base', gradient:'linear-gradient(90deg, #DCE8D6, #6B8F5D, #2F4A27)'},
-{slug:'blue', name:'Blue Base', gradient:'linear-gradient(90deg, #D6E4EE, #4C7DA8, #1F3A54)'},
-{slug:'purple', name:'Purple Base', gradient:'linear-gradient(90deg, #E4DCEE, #8067A0, #3E2F55)'},
-{slug:'pink', name:'Pink Base', gradient:'linear-gradient(90deg, #F5E2E8, #D98CA0, #7A3D4B)'},
-{slug:'white', name:'White Base', gradient:'linear-gradient(90deg, #FFFFFF, #F5F3EF, #DDD9D0)'},
-{slug:'beige', name:'Beige Base', gradient:'linear-gradient(90deg, #F2EAD9, #D9CBB5, #A18E6C)'},
-{slug:'gray', name:'Gray Base', gradient:'linear-gradient(90deg, #E4E6E7, #9CA3A8, #55595C)'},
-{slug:'brown', name:'Brown Base', gradient:'linear-gradient(90deg, #D8C3AE, #7B5B43, #3B2A1D)'},
-{slug:'black', name:'Black Base', gradient:'linear-gradient(90deg, #6E6E6E, #2B2B2B, #0A0A0A)'}
+
+{slug:'orange', name:'Orange Based Colors', swatches:['#E69F5F','#D28240','#F4C69F','#B67D3C','#EB882C','#F2BDA2','#C1785C','#DFC8B5','#D4966E']},
+{slug:'yellow', name:'Yellow Based Colors', swatches:['#F6CD8E','#FBCB78','#C99E53','#DDAC6D','#9E9985','#D7995D','#DDCDA6','#C2A462','#857C5D']},
+{slug:'green', name:'Green Based Colors', swatches:['#8EA486','#598C74','#ACCABC','#424036','#348A5D','#42603C','#C5D1B2','#45584D','#C4D9CE']},
+{slug:'blue', name:'Blue Based Colors', swatches:['#016081','#87AAB9','#8BC4D1','#2A3037','#BBC5DE','#016E85','#3AA9AE','#2B3441','#89C6B7']},
+{slug:'purple', name:'Purple Based Colors', swatches:['#665385','#A785A7','#B3A1C6','#7E6596','#443757','#DAC7DA','#624977','#DFD9E4','#9A8CA2']},
+{slug:'pink', name:'Pink Based Colors', swatches:['#895460','#F2D5D7','#ED939D','#9F4442','#AE8087','#EFC0CB','#D76C6E','#7A5F5A','#8D5869']},
+{slug:'white', name:'White Based Colors', swatches:['#EDEAE0','#E8DCC6','#DCDEE0','#EEEBE1','#DDCFB9','#E5DCD6','#D4DCDC','#E2DED8','#EEEFEA']},
+{slug:'beige', name:'Beige Based Colors', swatches:['#DBC7BD','#CDCDB4','#D5CEBF','#867E70','#E3DDD3','#E8DECD','#A78361','#CCC5BD','#BFB6A7']},
+{slug:'gray', name:'Gray Based Colors', swatches:['#969C92','#D1CBC1','#B4B2A9','#8E8A81','#C9C9C0','#817A6E','#BDBDB7','#413D3C','#A29BAA']},
+{slug:'brown', name:'Brown Based Colors', swatches:['#946644','#C48919','#6A4238','#89674A','#833337','#5D513E','#4D3C3C','#903934','#72353D']},
+{slug:'black', name:'Black Based Colors', swatches:['#434341','#204652','#2F2F30','#33383E','#313132','#373A3D','#494242','#494E52','#494A4B']}
 ];
 
 let selectedBrand = null;   // { slug, name } | null
@@ -465,7 +465,7 @@ grid.innerHTML = '';
 COLOR_FAMILIES.forEach(fam => {
 const tile = document.createElement('div');
 tile.className = 'family-tile';
-tile.innerHTML = `<div class="swatch-fill" style="background:${fam.gradient}"></div><div class="label">${fam.name}</div>`;
+tile.innerHTML = `<div class="mini-grid">${fam.swatches.map(hex => '<div style="background:' + hex + '"></div>').join('')}</div><div class="label">${fam.name}</div>`;
 tile.addEventListener('click', () => openFamily(fam));
 grid.appendChild(tile);
 });
