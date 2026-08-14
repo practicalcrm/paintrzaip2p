@@ -523,8 +523,11 @@ grid.appendChild(el);
 // PaintDB returns an `hsl` field on every color. Hue groups similar tones
 // together, so sorting on it is what makes scrolling move smoothly through
 // the family instead of jumping around PaintDB's own (brand-clustered) order.
+// PaintDB encodes the same red as both h=0 and h=360, which would strand the
+// h=360 ones at the bottom of the family, far from their identical twins at the
+// top — so wrap 360 back onto 0.
 function colorSortKey(c){
-const h = (c.hsl && typeof c.hsl.h === 'number') ? c.hsl.h : 0;
+const h = (c.hsl && typeof c.hsl.h === 'number') ? c.hsl.h % 360 : 0;
 const s = (c.hsl && typeof c.hsl.s === 'number') ? c.hsl.s : 0;
 const l = (c.hsl && typeof c.hsl.l === 'number') ? c.hsl.l : 0;
 return { h, s, l };
