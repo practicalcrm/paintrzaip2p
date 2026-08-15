@@ -100,16 +100,19 @@ without clashing. */
 --line:rgba(28,143,133,0.42);   /* brand teal outlines — continuity with the landing page */
 position:relative; z-index:0; color:#122120;
 }
+/* Photo runs at close to full colour; only a faint vignette pulls the edges
+down so the content still sits on something. */
 #appBg{
 position:fixed; inset:0; z-index:0; pointer-events:none;
-background:linear-gradient(rgba(255,255,255,0.52), rgba(255,255,255,0.60)), url('app-bg.jpg') center/cover no-repeat;
+background:radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(0,0,0,0.22) 100%), url('app-bg.jpg') center/cover no-repeat;
 }
 #app > header, #app > .wrap{position:relative; z-index:1;}
 
 /* Light shell: panels are translucent white over the photo, so the teal
 outline is what separates a card from the background rather than contrast. */
-#app header{background:rgba(255,255,255,0.74); border-bottom:1px solid var(--line);}
-#app .card{box-shadow:0 2px 12px rgba(18,33,32,0.07);}
+#app header{background:rgba(255,255,255,0.82); border-bottom:1px solid var(--line); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);}
+#app .card{box-shadow:0 2px 14px rgba(18,33,32,0.10); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);}
+#app nav.tabs button{backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);}
 #app input, #app textarea, #app .custom-select-btn{background:rgba(255,255,255,0.94); color:#122120;}
 #app input::placeholder, #app textarea::placeholder{color:#8B9795;}
 #app .btn-primary{background:var(--teal); color:#fff;}
