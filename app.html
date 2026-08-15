@@ -131,6 +131,22 @@ outline is what separates a card from the background rather than contrast. */
 #paintTheWrap{margin-top:18px;}
 #paintThe{width:100%;}
 #paintTheHint{margin-top:6px;}
+
+/* up to three picks, shown as removable chips so the user can name each
+one in the "Paint the" box ("trim in Pure White, doors in Naval") */
+#selectedColors{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+.color-chip{display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.92); border:1px solid var(--line); border-radius:999px; padding:5px 6px 5px 6px; font-size:12px;}
+.color-chip .dot{width:20px; height:20px; border-radius:50%; border:1px solid rgba(0,0,0,0.18); flex:none;}
+.color-chip .nm{font-weight:600;}
+.color-chip .hx{color:var(--muted-2); font-family:'JetBrains Mono'; font-size:10.5px;}
+.color-chip .rm{background:none; border:none; cursor:pointer; color:var(--muted-2); font-size:15px; line-height:1; padding:0 4px;}
+.color-chip .rm:hover{color:#B3413A;}
+
+/* On phone-shaped viewports `cover` crops a landscape photo down to a
+tiny zoomed-in sliver, so fit the whole image instead. */
+@media (max-aspect-ratio: 1/1){
+#appBg{background-color:#D9D7D1; background-size:auto, contain;}
+}
 </style>
 </head>
 <body>
@@ -189,7 +205,7 @@ PHOTOS_BUCKET: "photos"
 <!-- ---- NEW RENDER TAB ---- -->
 <section id="tab-render">
 <div class="card">
-<label class="field">1. Pick a color</label>
+<label class="field">1. Pick your colors — up to 3</label>
 <div class="toggle-row">
 <button class="btn btn-ghost active" id="srcSearchBtn">Search paint database</button>
 <button class="btn btn-ghost" id="srcPromptBtn">Describe a color</button>
@@ -220,6 +236,7 @@ PHOTOS_BUCKET: "photos"
 </div>
 </div>
 
+<div id="selectedColors"></div>
 <div id="selectedColorLine" class="status-line"></div>
 
 <!-- Tells the AI WHICH surface to repaint. Required — without it the
@@ -301,7 +318,8 @@ model guesses, and a wrong guess costs the user a real credit. -->
 const supa = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 let currentUser = null;
 let currentProfile = null;
-let selectedColor = null; // { hex, name, code, brand } | null
+const MAX_COLORS = 3;
+let selectedColors = []; // up to 3 × { key, hex, name, code, brand }
 let selectedFile = null;
 let currentRenderId = null;
 let correctionsUsed = 0;
@@ -450,12 +468,17 @@ return !document.getElementById('searchPane').classList.contains('hidden');
 function updatePaintTheMode(){
 const input = document.getElementById('paintThe');
 const hint = document.getElementById('paintTheHint');
-if (usingColorDatabase()){
-input.placeholder = 'cabinets   —   or:   walls and trim';
-hint.textContent = 'Just the surface. The color you picked above is applied automatically.';
-} else {
+if (!usingColorDatabase()){
 input.placeholder = 'upper cabinets white and the lower navy blue';
 hint.textContent = 'Describe the surfaces and the colors — the AI chooses the shades.';
+} else if (selectedColors.length > 1){
+// With several picks the app can't know which goes where, so the user says.
+const names = selectedColors.map(s => s.name);
+input.placeholder = `trim in ${names[0]}, body in ${names[1]}${names[2] ? ', doors in ' + names[2] : ''}`;
+hint.textContent = 'Say which surface gets which color — name them exactly as shown above.';
+} else {
+input.placeholder = 'cabinets   —   or:   walls and trim';
+hint.textContent = 'Just the surface. The color you picked above is applied automatically.';
 }
 }
 
@@ -469,9 +492,9 @@ document.getElementById('srcPromptBtn').addEventListener('click', () => {
 document.getElementById('srcPromptBtn').classList.add('active');
 document.getElementById('srcSearchBtn').classList.remove('active');
 document.getElementById('searchPane').classList.add('hidden');
-selectedColor = null;
+selectedColors = [];
+renderSelectedColors();
 document.getElementById('selectedColorLine').textContent = '';
-updatePaintTheMode();
 });
 updatePaintTheMode();
 
@@ -545,7 +568,8 @@ brandSelectBtn.classList.remove('open');
 
 function resetToFamilyStep(){
 selectedFamily = null;
-selectedColor = null;
+// Picks deliberately survive a brand change — trim and doors may come from
+// different brands.
 document.getElementById('selectedColorLine').textContent = '';
 document.getElementById('familyStep').classList.remove('hidden');
 document.getElementById('colorsStep').classList.add('hidden');
@@ -598,6 +622,60 @@ return { data: [], meta: { total: 0 }, ok: false };
 }
 }
 
+function colorKey(c){ return c.id || `${c.code || ''}|${c.hex}`; }
+
+// Selections survive moving between families and brands, so a user can take
+// trim from one family and doors from another.
+function markSelectedSwatches(){
+const keys = new Set(selectedColors.map(s => s.key));
+document.querySelectorAll('#swatchGrid .swatch').forEach(el => {
+el.classList.toggle('selected', keys.has(el.dataset.key));
+});
+}
+
+function renderSelectedColors(){
+const wrap = document.getElementById('selectedColors');
+wrap.innerHTML = '';
+selectedColors.forEach(s => {
+const chip = document.createElement('div');
+chip.className = 'color-chip';
+chip.innerHTML = `<span class="dot" style="background:${s.hex}"></span>
+<span><span class="nm">${s.name}</span> <span class="hx">${s.hex}</span></span>`;
+const rm = document.createElement('button');
+rm.className = 'rm';
+rm.type = 'button';
+rm.textContent = '×';
+rm.title = `Remove ${s.name}`;
+rm.addEventListener('click', () => {
+selectedColors = selectedColors.filter(x => x.key !== s.key);
+renderSelectedColors();
+markSelectedSwatches();
+});
+chip.appendChild(rm);
+wrap.appendChild(chip);
+});
+updatePaintTheMode();
+}
+
+function toggleColor(c, brandName){
+const key = colorKey(c);
+const existing = selectedColors.findIndex(s => s.key === key);
+const line = document.getElementById('selectedColorLine');
+if (existing >= 0){
+selectedColors.splice(existing, 1);
+line.textContent = '';
+} else {
+if (selectedColors.length >= MAX_COLORS){
+line.textContent = `That's the ${MAX_COLORS}-color limit — remove one to swap it out.`;
+return;
+}
+selectedColors.push({ key, hex: c.hex, name: c.name, code: c.code, brand: brandName });
+line.textContent = '';
+}
+renderSelectedColors();
+markSelectedSwatches();
+}
+
 function renderSwatches(list, append){
 const grid = document.getElementById('swatchGrid');
 if (!append) grid.innerHTML = '';
@@ -605,16 +683,13 @@ list.forEach(c => {
 const brandName = c.brand && c.brand.name ? c.brand.name : (c.brand || '');
 const el = document.createElement('div');
 el.className = 'swatch';
+el.dataset.key = colorKey(c);
 el.innerHTML = `<div class="fill" style="background:${c.hex}"></div>
 <div class="meta"><span class="n">${c.name}</span><span class="c">${brandName} ${c.code||''}</span></div>`;
-el.addEventListener('click', () => {
-document.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected'));
-el.classList.add('selected');
-selectedColor = { hex: c.hex, name: c.name, code: c.code, brand: brandName };
-document.getElementById('selectedColorLine').textContent = `Selected: ${brandName} ${c.name} (${c.hex})`;
-});
+el.addEventListener('click', () => toggleColor(c, brandName));
 grid.appendChild(el);
 });
+markSelectedSwatches();
 }
 
 // PaintDB returns an `hsl` field on every color. Hue groups similar tones
@@ -715,16 +790,18 @@ statusEl.textContent = 'Say what to paint — e.g. "cabinets" or "walls and trim
 document.getElementById('paintThe').focus();
 return;
 }
-if (usingColorDatabase() && !selectedColor){
+if (usingColorDatabase() && !selectedColors.length){
 statusEl.textContent = 'Pick a color from the swatches first.';
 return;
 }
 
-// In database mode the exact picked color is appended for the user, so they
-// never type a color themselves. In describe mode their text carries both.
-const composedPrompt = selectedColor
-? `Paint the ${surface} ${selectedColor.name} (${selectedColor.hex}).`
+// The picked colors are stated exactly so the user never types a color in
+// database mode; their text says which surface each one belongs to.
+const colorList = selectedColors.map(s => `${s.name} (${s.hex})`).join(', ');
+const composedPrompt = selectedColors.length
+? `Paint the ${surface}. Use these exact colors: ${colorList}.`
 : `Paint the ${surface}.`;
+const primaryColor = selectedColors[0] || null;
 
 const hasCredits = currentProfile.subscription_status === 'active' || currentProfile.credits_balance >= 1;
 if (!hasCredits){
@@ -741,8 +818,11 @@ const { data: { publicUrl } } = supa.storage.from(CONFIG.PHOTOS_BUCKET).getPubli
 const { data: renderRow, error: renderErr } = await supa.from('renders').insert({
 user_id: currentUser.id,
 original_photo_url: publicUrl,
-color_hex: selectedColor ? selectedColor.hex : null,
-color_name: selectedColor ? `${selectedColor.brand} ${selectedColor.name}${selectedColor.code ? ' ('+selectedColor.code+')' : ''}` : null,
+// color_hex stays single — it's the target the LAB correction pass locks to.
+color_hex: primaryColor ? primaryColor.hex : null,
+color_name: selectedColors.length
+? selectedColors.map(s => `${s.brand} ${s.name}${s.code ? ' ('+s.code+')' : ''}`).join(' + ')
+: null,
 prompt: composedPrompt,
 status: 'processing'
 }).select().single();
@@ -765,8 +845,9 @@ body: JSON.stringify({
 render_id: renderRow.id,
 user_id: currentUser.id,
 photo_url: publicUrl,
-color_hex: selectedColor ? selectedColor.hex : null,
-color_name: selectedColor ? `${selectedColor.brand} ${selectedColor.name}` : null,
+color_hex: primaryColor ? primaryColor.hex : null,
+color_name: primaryColor ? `${primaryColor.brand} ${primaryColor.name}` : null,
+colors: selectedColors.map(s => ({ hex: s.hex, name: s.name, code: s.code, brand: s.brand })),
 surface: surface,
 prompt: composedPrompt,
 brand_logo_url: currentProfile.brand_logo_url,
