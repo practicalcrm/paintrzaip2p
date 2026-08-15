@@ -88,6 +88,27 @@ label.field{display:block; font-size:12px; color:var(--muted); margin-bottom:6px
 .colors-step-header{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
 .colors-step-header .btn{padding:8px 14px; font-size:13px;}
 #colorSearch{width:100%; margin-bottom:4px;}
+
+/* ---- white-label shell ----------------------------------------------
+Scoped to #app on purpose: the login screen stays Paintrz-branded, but
+everything after sign-in goes neutral so a client's own logo sits on it
+without clashing. */
+#app{
+--panel:#1F2123; --panel-3:#191B1D; --teal:#A8ADB2; --teal-dim:#70757A;
+--muted:#B6BABE; --muted-2:#8A8F94; --line:rgba(255,255,255,0.14);
+position:relative; z-index:0;
+}
+#app .btn-primary{color:#15181A;}
+#appBg{
+position:fixed; inset:0; z-index:0; pointer-events:none;
+background:linear-gradient(rgba(13,14,15,0.93), rgba(13,14,15,0.96)), url('app-bg.jpg') center/cover no-repeat;
+}
+#app > header, #app > .wrap{position:relative; z-index:1;}
+#brandMark img{height:26px; width:auto; display:block;}
+#brandMark.logo-placeholder{color:var(--muted-2); font-weight:600; font-size:14px; letter-spacing:0.02em; border:1px dashed var(--line); padding:5px 10px; border-radius:8px;}
+#paintTheWrap{margin-top:18px;}
+#paintThe{width:100%;}
+#paintTheHint{margin-top:6px;}
 </style>
 </head>
 <body>
@@ -125,9 +146,10 @@ PHOTOS_BUCKET: "photos"
 
 <!-- ============================================================ APP ============================================================ -->
 <div id="app" class="hidden">
+<div id="appBg"></div>
 <header>
 <div class="wrap">
-<div class="brand">PAINTR<span class="z">Z</span></div>
+<div class="brand" id="brandMark">PAINTR<span class="z">Z</span></div>
 <div style="display:flex; align-items:center; gap:12px;">
 <span class="credits-pill" id="creditsPill">— credits</span>
 <button class="btn btn-ghost" id="logoutBtn">Log out</button>
@@ -176,10 +198,15 @@ PHOTOS_BUCKET: "photos"
 </div>
 </div>
 
-<div id="promptPane" class="hidden">
-<textarea id="colorPrompt" placeholder="e.g. 'a warm terracotta, slightly muted' or 'soft sage green'" style="width:100%; min-height:70px;"></textarea>
-</div>
 <div id="selectedColorLine" class="status-line"></div>
+
+<!-- Tells the AI WHICH surface to repaint. Required — without it the
+model guesses, and a wrong guess costs the user a real credit. -->
+<div id="paintTheWrap">
+<label class="field" for="paintThe">Paint the</label>
+<input type="text" id="paintThe" autocomplete="off">
+<div class="status-line" id="paintTheHint"></div>
+</div>
 </div>
 
 <div class="card">
@@ -335,9 +362,35 @@ if (event === 'SIGNED_IN'){ currentUser = session.user; loadProfile().then(showA
 });
 }
 
+// The two most expensive monthly plans include white-labeling, so their
+// header shows the client's own logo — or a placeholder until they add one.
+const WHITE_LABEL_PLANS = ['pro', 'studio'];
+
+function applyHeaderBranding(){
+const mark = document.getElementById('brandMark');
+const plan = (currentProfile.subscription_plan || '').trim().toLowerCase();
+const onTopTier = currentProfile.subscription_status === 'active' &&
+WHITE_LABEL_PLANS.some(p => plan.includes(p));
+if (currentProfile.brand_logo_url){
+mark.innerHTML = '';
+const img = document.createElement('img');
+img.src = currentProfile.brand_logo_url;
+img.alt = currentProfile.company_name || 'Your logo';
+mark.appendChild(img);
+mark.classList.remove('logo-placeholder');
+} else if (onTopTier){
+mark.textContent = '(your logo here)';
+mark.classList.add('logo-placeholder');
+} else {
+mark.innerHTML = 'PAINTR<span class="z">Z</span>';
+mark.classList.remove('logo-placeholder');
+}
+}
+
 async function loadProfile(){
 const { data } = await supa.from('profiles').select('*').eq('id', currentUser.id).single();
 currentProfile = data;
+applyHeaderBranding();
 document.getElementById('creditsPill').textContent =
 currentProfile.subscription_status === 'active' ? 'Unlimited (subscribed)' : `${currentProfile.credits_balance} credits`;
 document.getElementById('planStatus').textContent =
@@ -365,18 +418,40 @@ if (btn.dataset.tab === 'history') loadHistory();
 });
 
 // ---------- COLOR SOURCE TOGGLE ----------
+// Both modes use the same "Paint the" box; only its meaning changes.
+// Database mode = surface only (we append the exact picked color).
+// Describe mode = surface AND color, left to the model to interpret.
+function usingColorDatabase(){
+return !document.getElementById('searchPane').classList.contains('hidden');
+}
+
+function updatePaintTheMode(){
+const input = document.getElementById('paintThe');
+const hint = document.getElementById('paintTheHint');
+if (usingColorDatabase()){
+input.placeholder = 'cabinets   —   or:   walls and trim';
+hint.textContent = 'Just the surface. The color you picked above is applied automatically.';
+} else {
+input.placeholder = 'upper cabinets white and the lower navy blue';
+hint.textContent = 'Describe the surfaces and the colors — the AI chooses the shades.';
+}
+}
+
 document.getElementById('srcSearchBtn').addEventListener('click', () => {
 document.getElementById('srcSearchBtn').classList.add('active');
 document.getElementById('srcPromptBtn').classList.remove('active');
 document.getElementById('searchPane').classList.remove('hidden');
-document.getElementById('promptPane').classList.add('hidden');
+updatePaintTheMode();
 });
 document.getElementById('srcPromptBtn').addEventListener('click', () => {
 document.getElementById('srcPromptBtn').classList.add('active');
 document.getElementById('srcSearchBtn').classList.remove('active');
-document.getElementById('promptPane').classList.remove('hidden');
 document.getElementById('searchPane').classList.add('hidden');
+selectedColor = null;
+document.getElementById('selectedColorLine').textContent = '';
+updatePaintTheMode();
 });
+updatePaintTheMode();
 
 // ---------- BRAND -> FAMILY -> COLORS PICKER (PaintDB via n8n proxy — CORS blocks direct calls) ----------
 // Docs: https://paintdb.com/api/v1 -> GET /colors?q=&brand=&family=&limit=&offset=
@@ -598,11 +673,6 @@ clearTimeout(searchDebounce);
 searchDebounce = setTimeout(() => loadColors(), 300);
 });
 
-document.getElementById('colorPrompt').addEventListener('input', (e) => {
-selectedColor = null;
-document.getElementById('selectedColorLine').textContent = e.target.value ? `Prompt: "${e.target.value}"` : '';
-});
-
 // ---------- PHOTO UPLOAD ----------
 document.getElementById('uploadDrop').addEventListener('click', () => document.getElementById('photoInput').click());
 document.getElementById('photoInput').addEventListener('change', (e) => {
@@ -616,8 +686,23 @@ document.getElementById('previewRow').innerHTML = `<img src="${url}">`;
 document.getElementById('submitRenderBtn').addEventListener('click', async () => {
 const statusEl = document.getElementById('renderStatus');
 if (!selectedFile){ statusEl.textContent = 'Upload a photo first.'; return; }
-const promptText = document.getElementById('colorPrompt').value.trim();
-if (!selectedColor && !promptText){ statusEl.textContent = 'Pick a color or describe one.'; return; }
+
+const surface = document.getElementById('paintThe').value.trim();
+if (!surface){
+statusEl.textContent = 'Say what to paint — e.g. "cabinets" or "walls and trim".';
+document.getElementById('paintThe').focus();
+return;
+}
+if (usingColorDatabase() && !selectedColor){
+statusEl.textContent = 'Pick a color from the swatches first.';
+return;
+}
+
+// In database mode the exact picked color is appended for the user, so they
+// never type a color themselves. In describe mode their text carries both.
+const composedPrompt = selectedColor
+? `Paint the ${surface} ${selectedColor.name} (${selectedColor.hex}).`
+: `Paint the ${surface}.`;
 
 const hasCredits = currentProfile.subscription_status === 'active' || currentProfile.credits_balance >= 1;
 if (!hasCredits){
@@ -636,7 +721,7 @@ user_id: currentUser.id,
 original_photo_url: publicUrl,
 color_hex: selectedColor ? selectedColor.hex : null,
 color_name: selectedColor ? `${selectedColor.brand} ${selectedColor.name}${selectedColor.code ? ' ('+selectedColor.code+')' : ''}` : null,
-prompt: selectedColor ? null : promptText,
+prompt: composedPrompt,
 status: 'processing'
 }).select().single();
 if (renderErr){ statusEl.textContent = 'Could not start render: ' + renderErr.message; return; }
@@ -660,7 +745,8 @@ user_id: currentUser.id,
 photo_url: publicUrl,
 color_hex: selectedColor ? selectedColor.hex : null,
 color_name: selectedColor ? `${selectedColor.brand} ${selectedColor.name}` : null,
-prompt: selectedColor ? null : promptText,
+surface: surface,
+prompt: composedPrompt,
 brand_logo_url: currentProfile.brand_logo_url,
 brand_contact: currentProfile.brand_contact
 })
