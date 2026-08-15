@@ -45,11 +45,15 @@ nav.tabs button.active{background:var(--panel); color:var(--teal); border-color:
 .card{background:var(--panel-3); border:1px solid var(--line); border-radius:var(--radius); padding:24px; margin-bottom:20px;}
 .toggle-row{display:flex; gap:8px; margin-bottom:16px;}
 .toggle-row button{flex:1;}
-.swatch-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; max-height:360px; overflow-y:auto; margin-top:12px;}
-.swatch{border:2px solid transparent; border-radius:10px; overflow:hidden; cursor:pointer; background:var(--panel);}
+.swatch-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:8px; max-height:360px; overflow-y:auto; margin-top:12px;}
+.swatch{border:2px solid transparent; border-radius:9px; overflow:hidden; cursor:pointer; background:var(--panel);}
 .swatch.selected{border-color:var(--teal);}
-.swatch .fill{height:56px;}
-.swatch .meta{padding:8px; font-size:11px;}
+.swatch .fill{height:42px;}
+.swatch .meta{padding:6px; font-size:10.5px; line-height:1.25;}
+@media (max-width:640px){
+.swatch-grid{grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:6px;}
+.swatch .fill{height:36px;}
+}
 .swatch .meta .n{font-weight:600; display:block;}
 .swatch .meta .c{color:var(--muted-2); font-family:'JetBrains Mono'; font-size:10px;}
 .upload-drop{border:1px dashed var(--line); border-radius:12px; padding:24px; text-align:center; color:var(--muted); cursor:pointer;}
@@ -142,11 +146,8 @@ one in the "Paint the" box ("trim in Pure White, doors in Naval") */
 .color-chip .rm{background:none; border:none; cursor:pointer; color:var(--muted-2); font-size:15px; line-height:1; padding:0 4px;}
 .color-chip .rm:hover{color:#B3413A;}
 
-/* On phone-shaped viewports `cover` crops a landscape photo down to a
-tiny zoomed-in sliver, so fit the whole image instead. */
-@media (max-aspect-ratio: 1/1){
-#appBg{background-color:#D9D7D1; background-size:auto, contain;}
-}
+/* app-bg.jpg is square, so `cover` fills portrait and landscape alike
+without cropping down to a zoomed-in sliver on a phone. */
 </style>
 </head>
 <body>
