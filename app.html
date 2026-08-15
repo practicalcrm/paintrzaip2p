@@ -94,16 +94,35 @@ Scoped to #app on purpose: the login screen stays Paintrz-branded, but
 everything after sign-in goes neutral so a client's own logo sits on it
 without clashing. */
 #app{
---panel:#1F2123; --panel-3:#191B1D; --teal:#A8ADB2; --teal-dim:#70757A;
---muted:#B6BABE; --muted-2:#8A8F94; --line:rgba(255,255,255,0.14);
-position:relative; z-index:0;
+--panel:rgba(255,255,255,0.74); --panel-3:rgba(255,255,255,0.88);
+--teal:#1C8F85; --teal-dim:#15756D;
+--muted:#4C5B59; --muted-2:#6E7C7A;
+--line:rgba(28,143,133,0.42);   /* brand teal outlines — continuity with the landing page */
+position:relative; z-index:0; color:#122120;
 }
-#app .btn-primary{color:#15181A;}
 #appBg{
 position:fixed; inset:0; z-index:0; pointer-events:none;
-background:linear-gradient(rgba(13,14,15,0.93), rgba(13,14,15,0.96)), url('app-bg.jpg') center/cover no-repeat;
+background:linear-gradient(rgba(255,255,255,0.52), rgba(255,255,255,0.60)), url('app-bg.jpg') center/cover no-repeat;
 }
 #app > header, #app > .wrap{position:relative; z-index:1;}
+
+/* Light shell: panels are translucent white over the photo, so the teal
+outline is what separates a card from the background rather than contrast. */
+#app header{background:rgba(255,255,255,0.74); border-bottom:1px solid var(--line);}
+#app .card{box-shadow:0 2px 12px rgba(18,33,32,0.07);}
+#app input, #app textarea, #app .custom-select-btn{background:rgba(255,255,255,0.94); color:#122120;}
+#app input::placeholder, #app textarea::placeholder{color:#8B9795;}
+#app .btn-primary{background:var(--teal); color:#fff;}
+#app .btn-ghost{background:rgba(255,255,255,0.6); color:#122120; border-color:var(--line);}
+#app nav.tabs button{background:rgba(255,255,255,0.6); color:var(--muted);}
+#app nav.tabs button.active{background:#fff; color:var(--teal); border-color:var(--teal);}
+#app .credits-pill{background:rgba(255,255,255,0.78); color:var(--teal);}
+#app .custom-select-list{background:#fff;}
+#app .custom-select-list .opt{color:#122120;}
+#app .custom-select-list .opt:hover, #app .custom-select-list .opt.active{background:#E8F4F2; color:var(--teal);}
+#app .swatch{background:rgba(255,255,255,0.92);}
+#app .family-tile, #app .history-item{background:rgba(255,255,255,0.92);}
+#app .upload-drop{color:var(--muted);}
 #brandMark img{height:26px; width:auto; display:block;}
 #brandMark.logo-placeholder{color:var(--muted-2); font-weight:600; font-size:14px; letter-spacing:0.02em; border:1px dashed var(--line); padding:5px 10px; border-radius:8px;}
 #paintTheWrap{margin-top:18px;}
