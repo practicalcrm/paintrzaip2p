@@ -1,0 +1,137 @@
+{
+  "name": "Paintrz — Color Search Proxy",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "paintrz-colors",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "87ca0211-4a1f-447e-a626-fb64c9c45fb1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        288
+      ],
+      "webhookId": "65495269-6dab-48f7-a39b-c149da86bd52"
+    },
+    {
+      "parameters": {
+        "url": "https://paintdb.com/api/v1/colors",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.query.q || '' }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{  $json.query.limit || 100 }}"
+            },
+            {
+              "name": "brand",
+              "value": "={{ $json.query.brand || '' }}"
+            },
+            {
+              "name": "family",
+              "value": "={{  $json.query.family || '' }}"
+            },
+            {
+              "name": "offset",
+              "value": "={{  $json.query.offset || 0 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "036d51cd-8816-43fc-9ba0-5fe88e749c5c",
+      "name": "Call PaintDB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "532027a9-ac1f-4eaf-a2d3-8dddc00df398",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## PaintDB CORS proxy\nBrowsers block direct fetch() calls from paintrz.com to paintdb.com (no CORS headers on their end). This workflow runs the request server-side instead, where CORS doesn't apply, and adds the Access-Control-Allow-Origin header so the browser accepts *this* response.\n\nAfter publishing, copy the Production URL from the Webhook node and set it as `PAINTDB_PROXY` in paintrz-app.html's CONFIG.",
+        "height": 220,
+        "width": 340
+      },
+      "id": "35e15c0b-2865-4f77-9396-3ecdadb46d1c",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Call PaintDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call PaintDB": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "84960ab5-3b11-49cd-8a92-71f86d4e52db",
+  "meta": {
+    "instanceId": "5f7c53de05b6b36a10081b1408f4c5b8d800018747f3362986fc4c5196890b53"
+  },
+  "nodeGroups": [],
+  "id": "RERKYThYANdqkZQR",
+  "tags": []
+}
