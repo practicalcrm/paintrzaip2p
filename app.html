@@ -864,12 +864,29 @@ return;
 pollForResult(renderRow.id);
 });
 
+// The pipeline has no failure path yet, so a crashed render leaves the row on
+// 'processing' forever. Without a ceiling this polled indefinitely and the user
+// just watched a spinner. Give up after ~2 minutes and say so.
+let pollTimer = null;
+const POLL_MS = 2500;
+const POLL_LIMIT = 48;
+
 async function pollForResult(renderId){
 const statusEl = document.getElementById('renderStatus');
+if (pollTimer) clearInterval(pollTimer); // never stack two pollers
+let tries = 0;
 const interval = setInterval(async () => {
+if (++tries > POLL_LIMIT){
+clearInterval(interval);
+pollTimer = null;
+statusEl.textContent = "This render is taking longer than expected — it may have failed. Check History in a minute before spending another credit.";
+return;
+}
 const { data } = await supa.from('renders').select('*').eq('id', renderId).single();
+if (!data) return;
 if (data.status === 'done'){
 clearInterval(interval);
+pollTimer = null;
 statusEl.textContent = '';
 document.getElementById('renderResult').classList.remove('hidden');
 document.getElementById('renderImg').src = data.branded_photo_url || data.rendered_photo_url;
@@ -878,9 +895,15 @@ document.getElementById('correctionsLeft').textContent =
 loadProfile(); // refresh credit balance
 } else if (data.status === 'failed'){
 clearInterval(interval);
+pollTimer = null;
 statusEl.textContent = 'Render failed — try again.';
+} else if (data.status === 'insufficient_credits'){
+clearInterval(interval);
+pollTimer = null;
+statusEl.textContent = "You're out of credits — buy a pack on the Billing tab.";
 }
-}, 2500);
+}, POLL_MS);
+pollTimer = interval;
 }
 
 // ---------- CORRECTIONS ----------
@@ -895,6 +918,10 @@ body: JSON.stringify({
 render_id: currentRenderId,
 user_id: currentUser.id,
 correction_prompt: text,
+// Carry the surface through, or the correction falls back to a generic
+// "the surface" and loses what the user originally asked to paint.
+surface: document.getElementById('paintThe').value.trim(),
+correction_prompt_colors: selectedColors.map(s => `${s.name} (${s.hex})`).join(', '),
 brand_logo_url: currentProfile.brand_logo_url,
 brand_contact: currentProfile.brand_contact
 })
