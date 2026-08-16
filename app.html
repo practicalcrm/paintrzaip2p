@@ -132,6 +132,12 @@ outline is what separates a card from the background rather than contrast. */
 #app .upload-drop{color:var(--muted);}
 #brandMark img{height:26px; width:auto; display:block;}
 #brandMark.logo-placeholder{color:var(--muted-2); font-weight:600; font-size:14px; letter-spacing:0.02em; border:1px dashed var(--line); padding:5px 10px; border-radius:8px;}
+/* settings: logo picker */
+.logo-row{display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:10px;}
+.logo-preview{width:180px; height:92px; border:1px dashed var(--line); border-radius:10px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.55); overflow:hidden; flex:none;}
+.logo-preview img{max-width:100%; max-height:100%; object-fit:contain;}
+.logo-preview .empty{font-size:12px; color:var(--muted-2);}
+
 #paintTheWrap{margin-top:18px;}
 #paintThe{width:100%;}
 #paintTheHint{margin-top:6px;}
@@ -201,6 +207,7 @@ PHOTOS_BUCKET: "photos"
 <button data-tab="render" class="active">New render</button>
 <button data-tab="history">History</button>
 <button data-tab="billing">Billing</button>
+<button data-tab="settings">Settings</button>
 </nav>
 
 <!-- ---- NEW RENDER TAB ---- -->
@@ -310,6 +317,41 @@ model guesses, and a wrong guess costs the user a real credit. -->
 <p class="status-line">80 renders / month.</p>
 <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/fZu28rdXjeqg9JE004bfO04" style="margin-top:14px; width:100%;">Subscribe</button>
 </div>
+</div>
+</section>
+
+<!-- ---- SETTINGS TAB ---- -->
+<section id="tab-settings" class="hidden">
+<div class="card">
+<label class="field">Your branding</label>
+<p class="status-line" style="margin-top:0;">Your logo and contact details are burned into every render you download, and your logo replaces the Paintrz mark in the header.</p>
+
+<div style="margin-top:18px;">
+<label class="field" for="setCompany">Company name</label>
+<input type="text" id="setCompany" placeholder="Acme Painting Co." style="width:100%;">
+</div>
+
+<div style="margin-top:16px;">
+<label class="field" for="setContact">Contact line</label>
+<input type="text" id="setContact" placeholder="(520) 555-0134 &nbsp;·&nbsp; acmepainting.com" style="width:100%;">
+<div class="status-line" id="setContactHint" style="margin-top:6px;">This exact text is printed on the render — phone, site, licence number, whatever you want on it.</div>
+</div>
+
+<div style="margin-top:18px;">
+<label class="field">Logo</label>
+<div class="logo-row">
+<div class="logo-preview" id="logoPreview"><span class="empty">No logo yet</span></div>
+<div style="flex:1; min-width:180px;">
+<button type="button" class="btn btn-ghost" id="logoPickBtn" style="width:100%;">Choose logo image</button>
+<input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp" class="hidden">
+<div class="status-line" style="margin-top:6px;">PNG with a transparent background works best. It's placed bottom-left on the render at about 8% of the image height.</div>
+<button type="button" class="btn btn-ghost hidden" id="logoRemoveBtn" style="width:100%; margin-top:8px;">Remove logo</button>
+</div>
+</div>
+</div>
+
+<button class="btn btn-primary" id="saveSettingsBtn" style="margin-top:20px;">Save branding</button>
+<div class="status-line" id="settingsStatus"></div>
 </div>
 </section>
 </div>
@@ -451,10 +493,11 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
 btn.addEventListener('click', () => {
 document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
 btn.classList.add('active');
-['render','history','billing'].forEach(t => {
+['render','history','billing','settings'].forEach(t => {
 document.getElementById('tab-' + t).classList.toggle('hidden', t !== btn.dataset.tab);
 });
 if (btn.dataset.tab === 'history') loadHistory();
+if (btn.dataset.tab === 'settings') loadSettings();
 });
 });
 
@@ -953,6 +996,93 @@ el.addEventListener('click', () => window.open(img, '_blank'));
 grid.appendChild(el);
 });
 }
+
+// ---------- SETTINGS / WHITE-LABEL BRANDING ----------
+// Feeds three things: the logo burned onto each render, the contact line
+// printed beside it, and the logo shown in the header instead of PAINTRZ.
+let pendingLogoFile = null;   // chosen but not saved yet
+let pendingLogoRemoval = false;
+
+function setLogoPreview(src){
+const box = document.getElementById('logoPreview');
+box.innerHTML = '';
+if (src){
+const img = document.createElement('img');
+img.src = src;
+img.alt = 'Your logo';
+box.appendChild(img);
+document.getElementById('logoRemoveBtn').classList.remove('hidden');
+} else {
+const s = document.createElement('span');
+s.className = 'empty';
+s.textContent = 'No logo yet';
+box.appendChild(s);
+document.getElementById('logoRemoveBtn').classList.add('hidden');
+}
+}
+
+function loadSettings(){
+if (!currentProfile) return;
+document.getElementById('setCompany').value = currentProfile.company_name || '';
+document.getElementById('setContact').value = currentProfile.brand_contact || '';
+setLogoPreview(currentProfile.brand_logo_url || null);
+document.getElementById('settingsStatus').textContent = '';
+pendingLogoFile = null;
+pendingLogoRemoval = false;
+}
+
+document.getElementById('logoPickBtn').addEventListener('click', () => document.getElementById('logoInput').click());
+
+document.getElementById('logoInput').addEventListener('change', (e) => {
+const file = e.target.files[0];
+if (!file) return;
+if (file.size > 2 * 1024 * 1024){
+document.getElementById('settingsStatus').textContent = 'That logo is over 2MB — please use a smaller file.';
+return;
+}
+pendingLogoFile = file;
+pendingLogoRemoval = false;
+setLogoPreview(URL.createObjectURL(file));
+document.getElementById('settingsStatus').textContent = 'Logo ready — press Save branding to apply it.';
+});
+
+document.getElementById('logoRemoveBtn').addEventListener('click', () => {
+pendingLogoFile = null;
+pendingLogoRemoval = true;
+setLogoPreview(null);
+document.getElementById('settingsStatus').textContent = 'Logo will be removed when you save.';
+});
+
+document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
+const statusEl = document.getElementById('settingsStatus');
+statusEl.textContent = 'Saving…';
+
+let logoUrl = currentProfile.brand_logo_url || null;
+
+if (pendingLogoRemoval){
+logoUrl = null;
+} else if (pendingLogoFile){
+// Cache-bust the path, or browsers keep serving the previous logo from the
+// same URL after a replacement.
+const ext = (pendingLogoFile.name.split('.').pop() || 'png').toLowerCase();
+const path = `${currentUser.id}/logo_${Date.now()}.${ext}`;
+const { error: upErr } = await supa.storage.from(CONFIG.PHOTOS_BUCKET).upload(path, pendingLogoFile, { upsert: true });
+if (upErr){ statusEl.textContent = 'Logo upload failed: ' + upErr.message; return; }
+logoUrl = supa.storage.from(CONFIG.PHOTOS_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+const { error } = await supa.from('profiles').update({
+company_name: document.getElementById('setCompany').value.trim() || null,
+brand_contact: document.getElementById('setContact').value.trim() || null,
+brand_logo_url: logoUrl
+}).eq('id', currentUser.id);
+
+if (error){ statusEl.textContent = 'Could not save: ' + error.message; return; }
+
+await loadProfile();   // refreshes currentProfile and re-renders the header logo
+loadSettings();
+statusEl.textContent = 'Saved. Your branding is on every render from here on.';
+});
 
 // ---------- BILLING ----------
 document.querySelectorAll('.tier-btn').forEach(btn => {
