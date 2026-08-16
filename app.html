@@ -139,6 +139,8 @@ controls and billing are gone, and history is scoped to this visit only. */
 #app.client-mode #exitClientBtn{display:inline-block;}
 #app.client-mode #headerActions{display:none !important;}
 #app.client-mode nav.tabs button[data-tab="settings"]{display:none;}
+/* Nothing about cost, credits or allowances in front of a homeowner. */
+#app.client-mode #correctionsLeft{display:none !important;}
 #app.client-mode header .wrap{justify-content:flex-start; gap:16px;}
 #app.client-mode #brandMark{flex:1; text-align:center; font-size:22px;}
 #app.client-mode #brandMark img{height:40px; margin:0 auto;}
@@ -480,16 +482,58 @@ mark.classList.remove('logo-placeholder');
 }
 }
 
+// Monthly render allowance per plan. Subscriptions are NOT unlimited — the
+// pill used to claim they were, which is wrong on every tier.
+const PLAN_ALLOWANCE = { starter: 7, crew: 16, pro: 35, studio: 80 };
+
+function planAllowance(planName){
+const p = (planName || '').trim().toLowerCase();
+const key = Object.keys(PLAN_ALLOWANCE).find(k => p.includes(k));
+return key ? { name: key.charAt(0).toUpperCase() + key.slice(1), renders: PLAN_ALLOWANCE[key] } : null;
+}
+
+// Renders used this calendar month. Failed and refused attempts don't count.
+async function rendersUsedThisMonth(){
+const start = new Date();
+start.setDate(1); start.setHours(0, 0, 0, 0);
+const { count, error } = await supa
+.from('renders')
+.select('id', { count: 'exact', head: true })
+.eq('user_id', currentUser.id)
+.in('status', ['done', 'processing'])
+.gte('created_at', start.toISOString());
+return error ? null : (count || 0);
+}
+
 async function loadProfile(){
 const { data } = await supa.from('profiles').select('*').eq('id', currentUser.id).single();
 currentProfile = data;
 applyHeaderBranding();
-document.getElementById('creditsPill').textContent =
-currentProfile.subscription_status === 'active' ? 'Unlimited (subscribed)' : `${currentProfile.credits_balance} credits`;
-document.getElementById('planStatus').textContent =
-currentProfile.subscription_status === 'active'
-? `Subscribed — ${currentProfile.subscription_plan || 'monthly plan'}`
-: `Pay as you go — ${currentProfile.credits_balance} render credit(s) remaining`;
+
+const pill = document.getElementById('creditsPill');
+const planEl = document.getElementById('planStatus');
+const subscribed = currentProfile.subscription_status === 'active';
+const plan = subscribed ? planAllowance(currentProfile.subscription_plan) : null;
+
+if (subscribed && plan){
+const used = await rendersUsedThisMonth();
+if (used === null){
+pill.textContent = `${plan.name} — ${plan.renders}/mo`;
+planEl.textContent = `${plan.name} — ${plan.renders} renders per month.`;
+} else {
+const left = Math.max(0, plan.renders - used);
+pill.textContent = `${left} of ${plan.renders} left`;
+planEl.textContent = `${plan.name} — ${used} of ${plan.renders} renders used this month (${left} left).`;
+}
+} else if (subscribed){
+// Active subscription but an unrecognised plan name from the Stripe webhook.
+pill.textContent = 'Subscribed';
+planEl.textContent = `Subscribed — ${currentProfile.subscription_plan || 'monthly plan'}.`;
+} else {
+const c = currentProfile.credits_balance || 0;
+pill.textContent = `${c} credit${c === 1 ? '' : 's'}`;
+planEl.textContent = `Pay as you go — ${c} render credit${c === 1 ? '' : 's'} remaining.`;
+}
 }
 
 function showApp(){
