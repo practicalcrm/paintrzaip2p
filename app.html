@@ -132,6 +132,18 @@ outline is what separates a card from the background rather than contrast. */
 #app .upload-drop{color:var(--muted);}
 #brandMark img{height:26px; width:auto; display:block;}
 #brandMark.logo-placeholder{color:var(--muted-2); font-weight:600; font-size:14px; letter-spacing:0.02em; border:1px dashed var(--line); padding:5px 10px; border-radius:8px;}
+/* ---- client mode ----------------------------------------------------
+Handed to a homeowner mid-appointment: the contractor's logo leads, account
+controls and billing are gone, and history is scoped to this visit only. */
+#exitClientBtn{display:none;}
+#app.client-mode #exitClientBtn{display:inline-block;}
+#app.client-mode #headerActions{display:none !important;}
+#app.client-mode nav.tabs button[data-tab="settings"]{display:none;}
+#app.client-mode header .wrap{justify-content:flex-start; gap:16px;}
+#app.client-mode #brandMark{flex:1; text-align:center; font-size:22px;}
+#app.client-mode #brandMark img{height:40px; margin:0 auto;}
+#app.client-mode header{padding:20px 0;}
+
 /* settings: logo picker */
 .logo-row{display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:10px;}
 .logo-preview{width:180px; height:92px; border:1px dashed var(--line); border-radius:10px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.55); overflow:hidden; flex:none;}
@@ -194,9 +206,11 @@ PHOTOS_BUCKET: "photos"
 <div id="appBg"></div>
 <header>
 <div class="wrap">
+<button class="btn btn-ghost" id="exitClientBtn" title="Back to your account">‹ Back</button>
 <div class="brand" id="brandMark">PAINTR<span class="z">Z</span></div>
-<div style="display:flex; align-items:center; gap:12px;">
+<div style="display:flex; align-items:center; gap:12px;" id="headerActions">
 <span class="credits-pill" id="creditsPill">— credits</span>
+<button class="btn btn-ghost" id="clientModeBtn" title="Hand the screen to your client">Client mode</button>
 <button class="btn btn-ghost" id="logoutBtn">Log out</button>
 </div>
 </div>
@@ -206,7 +220,6 @@ PHOTOS_BUCKET: "photos"
 <nav class="tabs">
 <button data-tab="render" class="active">New render</button>
 <button data-tab="history">History</button>
-<button data-tab="billing">Billing</button>
 <button data-tab="settings">Settings</button>
 </nav>
 
@@ -285,8 +298,8 @@ model guesses, and a wrong guess costs the user a real credit. -->
 <div class="history-grid" id="historyGrid"></div>
 </section>
 
-<!-- ---- BILLING TAB ---- -->
-<section id="tab-billing" class="hidden">
+<!-- ---- SETTINGS TAB (branding + billing) ---- -->
+<section id="tab-settings" class="hidden">
 <div class="card">
 <h3 style="margin-bottom:8px;">Current plan</h3>
 <p class="status-line" id="planStatus">—</p>
@@ -318,11 +331,8 @@ model guesses, and a wrong guess costs the user a real credit. -->
 <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/fZu28rdXjeqg9JE004bfO04" style="margin-top:14px; width:100%;">Subscribe</button>
 </div>
 </div>
-</section>
 
-<!-- ---- SETTINGS TAB ---- -->
-<section id="tab-settings" class="hidden">
-<div class="card">
+<div class="card" style="margin-top:20px;">
 <label class="field">Your branding</label>
 <p class="status-line" style="margin-top:0;">Your logo and contact details are burned into every render you download, and your logo replaces the Paintrz mark in the header.</p>
 
@@ -493,7 +503,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
 btn.addEventListener('click', () => {
 document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
 btn.classList.add('active');
-['render','history','billing','settings'].forEach(t => {
+['render','history','settings'].forEach(t => {
 document.getElementById('tab-' + t).classList.toggle('hidden', t !== btn.dataset.tab);
 });
 if (btn.dataset.tab === 'history') loadHistory();
@@ -872,6 +882,7 @@ status: 'processing'
 }).select().single();
 if (renderErr){ statusEl.textContent = 'Could not start render: ' + renderErr.message; return; }
 currentRenderId = renderRow.id;
+sessionRenderIds.push(renderRow.id);
 correctionsUsed = 0;
 
 statusEl.textContent = 'Rendering — this takes about 10 seconds…';
@@ -982,12 +993,36 @@ a.download = 'paintrz-render.jpg';
 a.click();
 });
 
+// ---------- CLIENT MODE ----------
+// Renders produced during this visit. Client mode shows only these, so a
+// homeowner never sees another customer's job in the history.
+let sessionRenderIds = [];
+let clientMode = false;
+
+function setClientMode(on){
+clientMode = on;
+document.getElementById('app').classList.toggle('client-mode', on);
+if (on){
+// Never hand over the screen sitting on the settings tab.
+document.querySelector('nav.tabs button[data-tab="render"]').click();
+}
+loadHistory();
+}
+
+document.getElementById('clientModeBtn').addEventListener('click', () => setClientMode(true));
+document.getElementById('exitClientBtn').addEventListener('click', () => setClientMode(false));
+
 // ---------- HISTORY ----------
 async function loadHistory(){
 const { data } = await supa.from('renders').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
 const grid = document.getElementById('historyGrid');
 grid.innerHTML = '';
-(data || []).forEach(r => {
+let rows = data || [];
+if (clientMode) rows = rows.filter(r => sessionRenderIds.includes(r.id));
+if (clientMode && !rows.length){
+grid.innerHTML = '<div class="status-line">Renders from this visit will appear here.</div>';
+}
+rows.forEach(r => {
 const el = document.createElement('div');
 el.className = 'history-item';
 const img = r.branded_photo_url || r.rendered_photo_url || r.original_photo_url;
