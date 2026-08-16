@@ -486,23 +486,50 @@ mark.classList.remove('logo-placeholder');
 // pill used to claim they were, which is wrong on every tier.
 const PLAN_ALLOWANCE = { starter: 7, crew: 16, pro: 35, studio: 80 };
 
+// Renders left in the current period; null when it doesn't apply or is unknown.
+// Only a hint for the UI — the pipeline is what actually enforces the cap.
+let periodRendersLeft = null;
+
 function planAllowance(planName){
 const p = (planName || '').trim().toLowerCase();
 const key = Object.keys(PLAN_ALLOWANCE).find(k => p.includes(k));
 return key ? { name: key.charAt(0).toUpperCase() + key.slice(1), renders: PLAN_ALLOWANCE[key] } : null;
 }
 
-// Renders used this calendar month. Failed and refused attempts don't count.
-async function rendersUsedThisMonth(){
-const start = new Date();
-start.setDate(1); start.setHours(0, 0, 0, 0);
+// Start of the current billing period: the most recent monthly anniversary of
+// the subscription start. Anchored to the original date each time rather than
+// stepped month by month, so it can't drift.
+function billingPeriodStart(startedAt){
+if (!startedAt) return null;
+const start = new Date(startedAt);
+if (isNaN(start)) return null;
+const now = new Date();
+let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+if (now.getDate() < start.getDate()) months--;
+if (months < 0) months = 0;
+const d = new Date(start);
+d.setMonth(start.getMonth() + months);
+return d;
+}
+
+// Renders used in the current billing period. Failed and refused attempts
+// don't count, and corrections reuse their original row so they don't either.
+async function rendersUsedThisPeriod(periodStart){
+if (!periodStart) return null;
 const { count, error } = await supa
 .from('renders')
 .select('id', { count: 'exact', head: true })
 .eq('user_id', currentUser.id)
 .in('status', ['done', 'processing'])
-.gte('created_at', start.toISOString());
+.gte('created_at', periodStart.toISOString());
 return error ? null : (count || 0);
+}
+
+function formatPeriodEnd(periodStart){
+if (!periodStart) return '';
+const end = new Date(periodStart);
+end.setMonth(end.getMonth() + 1);
+return end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 async function loadProfile(){
@@ -516,14 +543,17 @@ const subscribed = currentProfile.subscription_status === 'active';
 const plan = subscribed ? planAllowance(currentProfile.subscription_plan) : null;
 
 if (subscribed && plan){
-const used = await rendersUsedThisMonth();
+const periodStart = billingPeriodStart(currentProfile.subscription_started_at);
+const used = await rendersUsedThisPeriod(periodStart);
 if (used === null){
+// No anchor yet (or the count failed) — state the allowance, don't guess usage.
 pill.textContent = `${plan.name} — ${plan.renders}/mo`;
 planEl.textContent = `${plan.name} — ${plan.renders} renders per month.`;
 } else {
 const left = Math.max(0, plan.renders - used);
+periodRendersLeft = left;
 pill.textContent = `${left} of ${plan.renders} left`;
-planEl.textContent = `${plan.name} — ${used} of ${plan.renders} renders used this month (${left} left).`;
+planEl.textContent = `${plan.name} — ${used} of ${plan.renders} renders used (resets ${formatPeriodEnd(periodStart)}).`;
 }
 } else if (subscribed){
 // Active subscription but an unrecognised plan name from the Stripe webhook.
@@ -901,9 +931,13 @@ const composedPrompt = selectedColors.length
 : `Paint the ${surface}.`;
 const primaryColor = selectedColors[0] || null;
 
-const hasCredits = currentProfile.subscription_status === 'active' || currentProfile.credits_balance >= 1;
-if (!hasCredits){
-statusEl.textContent = "You're out of credits — buy a pack on the Billing tab.";
+const subscribed = currentProfile.subscription_status === 'active';
+if (!subscribed && (currentProfile.credits_balance || 0) < 1){
+statusEl.textContent = "You're out of credits — buy a pack under Settings.";
+return;
+}
+if (subscribed && periodRendersLeft === 0){
+statusEl.textContent = "You've used every render on your plan this period — upgrade under Settings for more.";
 return;
 }
 

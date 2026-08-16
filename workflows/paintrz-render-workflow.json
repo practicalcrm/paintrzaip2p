@@ -54,7 +54,37 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $('Webhook').first().json.body;\nconst renderRow = ($('Get Render Row').first().json || [])[0];\nconst profileRow = ($('Get Profile Row').first().json || [])[0];\nconst FREE_CORRECTIONS = 2;\n\n// The webhook is public and takes render_id and user_id as separate inputs.\n// Without this check a caller could pass their own user_id alongside someone\n// else's render_id and write to a stranger's render.\nconst rowsExist = !!renderRow && !!profileRow;\nconst ownsRender = rowsExist && renderRow.user_id === body.user_id;\n\nconst isCorrection = !!body.correction_prompt;\nconst subscriptionActive = rowsExist && profileRow.subscription_status === 'active';\nconst hasCredits = rowsExist && (profileRow.credits_balance || 0) >= 1;\nconst freeCorrection = isCorrection && rowsExist && (renderRow.corrections_used || 0) < FREE_CORRECTIONS;\n\nconst allowed = ownsRender && (subscriptionActive || hasCredits || freeCorrection);\n\n// Decided once here so the charge and the refund can never disagree.\nconst shouldCharge = allowed && !subscriptionActive && (!isCorrection || !freeCorrection);\n\nreturn [{\n  json: {\n    allowed,\n    should_charge: shouldCharge,\n    owns_render: ownsRender,\n    rows_exist: rowsExist,\n    is_correction: isCorrection,\n    free_correction: freeCorrection,\n    subscription_active: subscriptionActive\n  }\n}];"
+        "jsCode": "const profile = ($('Get Profile Row').first().json || [])[0] || {};\nconst active = profile.subscription_status === 'active';\n\n// Most recent monthly anniversary of the subscription start, anchored to the\n// original date rather than stepped month by month, so it cannot drift.\n// Counting calendar months instead would hand someone who subscribed on the\n// 20th a fresh allowance eleven days later.\nfunction periodStart(startedAt){\n  if (!startedAt) return null;\n  const start = new Date(startedAt);\n  if (isNaN(start)) return null;\n  const now = new Date();\n  let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());\n  if (now.getDate() < start.getDate()) months--;\n  if (months < 0) months = 0;\n  const d = new Date(start);\n  d.setMonth(start.getMonth() + months);\n  return d;\n}\n\nconst ps = active ? periodStart(profile.subscription_started_at) : null;\n\n// Epoch fallback keeps the follow-up query valid; the result is ignored when\n// has_period is false.\nreturn [{ json: { period_start: (ps || new Date(0)).toISOString(), has_period: !!ps } }];"
+      },
+      "id": "compute_period",
+      "name": "Compute Period",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1290, 160]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/renders?user_id=eq.{{ $('Webhook').item.json.body.user_id }}&status=in.(done,processing)&created_at=gte.{{ $json.period_start }}&select=id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "count_period_renders",
+      "name": "Count Period Renders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1180, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body;\nconst renderRow = ($('Get Render Row').first().json || [])[0];\nconst profileRow = ($('Get Profile Row').first().json || [])[0];\nconst FREE_CORRECTIONS = 2;\n\n// Monthly render allowance per plan. Subscriptions are NOT unlimited - without\n// this check a $5 Starter account could render without limit.\nconst PLAN_ALLOWANCE = { starter: 7, crew: 16, pro: 35, studio: 80 };\nfunction allowanceFor(planName){\n  const p = (planName || '').trim().toLowerCase();\n  const key = Object.keys(PLAN_ALLOWANCE).find(k => p.includes(k));\n  return key ? PLAN_ALLOWANCE[key] : null;\n}\n\n// The webhook is public and takes render_id and user_id as separate inputs.\n// Without this check a caller could pass their own user_id alongside someone\n// else's render_id and write to a stranger's render.\nconst rowsExist = !!renderRow && !!profileRow;\nconst ownsRender = rowsExist && renderRow.user_id === body.user_id;\n\nconst isCorrection = !!body.correction_prompt;\nconst subscriptionActive = rowsExist && profileRow.subscription_status === 'active';\nconst hasCredits = rowsExist && (profileRow.credits_balance || 0) >= 1;\nconst freeCorrection = isCorrection && rowsExist && (renderRow.corrections_used || 0) < FREE_CORRECTIONS;\n\n// Usage this billing period. A correction reuses its original render row, so\n// it never counts a second time against the allowance.\nconst period = $('Compute Period').first().json || {};\nconst used = $('Count Period Renders').all().map(i => i.json).filter(j => j && j.id).length;\nconst allowance = subscriptionActive ? allowanceFor(profileRow.subscription_plan) : null;\n\n// Fail open on anything unknown - an unrecognised plan name or a missing\n// period anchor must not lock a paying customer out.\nconst allowanceApplies = subscriptionActive && !!allowance && !!period.has_period && !isCorrection;\nconst withinAllowance = !allowanceApplies || used < allowance;\nconst overAllowance = allowanceApplies && !withinAllowance;\n\nconst allowed = ownsRender && (\n  (subscriptionActive && withinAllowance) || hasCredits || freeCorrection\n);\n\n// Decided once here so the charge and the refund can never disagree.\nconst shouldCharge = allowed && !subscriptionActive && (!isCorrection || !freeCorrection);\n\nreturn [{\n  json: {\n    allowed,\n    should_charge: shouldCharge,\n    owns_render: ownsRender,\n    rows_exist: rowsExist,\n    is_correction: isCorrection,\n    free_correction: freeCorrection,\n    subscription_active: subscriptionActive,\n    over_allowance: overAllowance,\n    period_used: used,\n    period_allowance: allowance\n  }\n}];"
       },
       "id": "compute_access",
       "name": "Compute Access",
@@ -111,7 +141,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { \"ok\": false, \"reason\": $('Compute Access').item.json.owns_render ? \"insufficient_credits\" : \"not_authorized\" } }}",
+        "responseBody": "={{ { \"ok\": false, \"reason\": !$('Compute Access').item.json.owns_render ? \"not_authorized\" : ($('Compute Access').item.json.over_allowance ? \"plan_limit_reached\" : \"insufficient_credits\"), \"used\": $('Compute Access').item.json.period_used, \"allowance\": $('Compute Access').item.json.period_allowance } }}",
         "options": { "responseCode": 402 }
       },
       "id": "respond_insufficient",
@@ -444,7 +474,9 @@
   "connections": {
     "Webhook": { "main": [[{ "node": "Get Render Row", "type": "main", "index": 0 }]] },
     "Get Render Row": { "main": [[{ "node": "Get Profile Row", "type": "main", "index": 0 }]] },
-    "Get Profile Row": { "main": [[{ "node": "Compute Access", "type": "main", "index": 0 }]] },
+    "Get Profile Row": { "main": [[{ "node": "Compute Period", "type": "main", "index": 0 }]] },
+    "Compute Period": { "main": [[{ "node": "Count Period Renders", "type": "main", "index": 0 }]] },
+    "Count Period Renders": { "main": [[{ "node": "Compute Access", "type": "main", "index": 0 }]] },
     "Compute Access": { "main": [[{ "node": "Has Access?", "type": "main", "index": 0 }]] },
     "Has Access?": {
       "main": [
