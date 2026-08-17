@@ -16,41 +16,35 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/renders?id=eq.{{ $json.body.render_id }}&select=*",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
-          ]
-        },
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?id=eq.{{ $json.body.render_id }}&select=*",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
         "options": {}
       },
       "id": "get_render_row",
       "name": "Get Render Row",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1620, 0]
+      "position": [-1620, 0],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/profiles?id=eq.{{ $('Webhook').item.json.body.user_id }}&select=*",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
-          ]
-        },
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/profiles?id=eq.{{ $('Webhook').item.json.body.user_id }}&select=*",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
         "options": {}
       },
       "id": "get_profile_row",
       "name": "Get Profile Row",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1400, 0]
+      "position": [-1400, 0],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
     },
     {
       "parameters": {
@@ -64,15 +58,9 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/renders?user_id=eq.{{ $('Webhook').item.json.body.user_id }}&status=in.(done,processing)&created_at=gte.{{ $json.period_start }}&select=id",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
-          ]
-        },
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?user_id=eq.{{ $('Webhook').item.json.body.user_id }}&status=in.(done,processing)&created_at=gte.{{ $json.period_start }}&select=id",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
         "options": {}
       },
       "id": "count_period_renders",
@@ -80,11 +68,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [-1180, 160],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const body = $('Webhook').first().json.body;\nconst renderRow = ($('Get Render Row').first().json || [])[0];\nconst profileRow = ($('Get Profile Row').first().json || [])[0];\nconst FREE_CORRECTIONS = 2;\n\n// Monthly render allowance per plan. Without this a $5 Starter account could\n// render without limit. Studio is SOLD as unlimited, so its number is a safety\n// ceiling against runaway image-gen spend rather than a advertised quota - a\n// normal user never reaches it.\nconst PLAN_ALLOWANCE = { starter: 7, crew: 16, pro: 35, studio: 300 };\nfunction allowanceFor(planName){\n  const p = (planName || '').trim().toLowerCase();\n  const key = Object.keys(PLAN_ALLOWANCE).find(k => p.includes(k));\n  return key ? PLAN_ALLOWANCE[key] : null;\n}\n\n// The webhook is public and takes render_id and user_id as separate inputs.\n// Without this check a caller could pass their own user_id alongside someone\n// else's render_id and write to a stranger's render.\nconst rowsExist = !!renderRow && !!profileRow;\nconst ownsRender = rowsExist && renderRow.user_id === body.user_id;\n\nconst isCorrection = !!body.correction_prompt;\nconst subscriptionActive = rowsExist && profileRow.subscription_status === 'active';\nconst hasCredits = rowsExist && (profileRow.credits_balance || 0) >= 1;\nconst freeCorrection = isCorrection && rowsExist && (renderRow.corrections_used || 0) < FREE_CORRECTIONS;\n\n// Usage this billing period. A correction reuses its original render row, so\n// it never counts a second time against the allowance.\nconst period = $('Compute Period').first().json || {};\nconst used = $('Count Period Renders').all().map(i => i.json).filter(j => j && j.id).length;\nconst allowance = subscriptionActive ? allowanceFor(profileRow.subscription_plan) : null;\n\n// Fail open on anything unknown - an unrecognised plan name or a missing\n// period anchor must not lock a paying customer out.\nconst allowanceApplies = subscriptionActive && !!allowance && !!period.has_period && !isCorrection;\nconst withinAllowance = !allowanceApplies || used < allowance;\nconst overAllowance = allowanceApplies && !withinAllowance;\n\nconst allowed = ownsRender && (\n  (subscriptionActive && withinAllowance) || hasCredits || freeCorrection\n);\n\n// Decided once here so the charge and the refund can never disagree.\nconst shouldCharge = allowed && !subscriptionActive && (!isCorrection || !freeCorrection);\n\nreturn [{\n  json: {\n    allowed,\n    should_charge: shouldCharge,\n    owns_render: ownsRender,\n    rows_exist: rowsExist,\n    is_correction: isCorrection,\n    free_correction: freeCorrection,\n    subscription_active: subscriptionActive,\n    over_allowance: overAllowance,\n    period_used: used,\n    period_allowance: allowance\n  }\n}];"
+        "jsCode": "const body = $('Webhook').first().json.body;\nconst renderRow = ($('Get Render Row').first().json || [])[0];\nconst profileRow = ($('Get Profile Row').first().json || [])[0];\nconst FREE_CORRECTIONS = 2;\n\n// Monthly render allowance per plan. Without this a $5 Starter account could\n// render without limit. Studio is SOLD as unlimited, so its number is a safety\n// ceiling against runaway image-gen spend rather than an advertised quota - a\n// normal user never reaches it.\nconst PLAN_ALLOWANCE = { starter: 7, crew: 16, pro: 35, studio: 300 };\nfunction allowanceFor(planName){\n  const p = (planName || '').trim().toLowerCase();\n  const key = Object.keys(PLAN_ALLOWANCE).find(k => p.includes(k));\n  return key ? PLAN_ALLOWANCE[key] : null;\n}\n\n// The webhook is public and takes render_id and user_id as separate inputs.\n// Without this check a caller could pass their own user_id alongside someone\n// else's render_id and write to a stranger's render.\nconst rowsExist = !!renderRow && !!profileRow;\nconst ownsRender = rowsExist && renderRow.user_id === body.user_id;\n\nconst isCorrection = !!body.correction_prompt;\nconst subscriptionActive = rowsExist && profileRow.subscription_status === 'active';\nconst hasCredits = rowsExist && (profileRow.credits_balance || 0) >= 1;\nconst freeCorrection = isCorrection && rowsExist && (renderRow.corrections_used || 0) < FREE_CORRECTIONS;\n\n// Usage this billing period. A correction reuses its original render row, so\n// it never counts a second time against the allowance.\nconst period = $('Compute Period').first().json || {};\nconst used = $('Count Period Renders').all().map(i => i.json).filter(j => j && j.id).length;\nconst allowance = subscriptionActive ? allowanceFor(profileRow.subscription_plan) : null;\n\n// Fail open on anything unknown - an unrecognised plan name or a missing\n// period anchor must not lock a paying customer out.\nconst allowanceApplies = subscriptionActive && !!allowance && !!period.has_period && !isCorrection;\nconst withinAllowance = !allowanceApplies || used < allowance;\nconst overAllowance = allowanceApplies && !withinAllowance;\n\nconst allowed = ownsRender && (\n  (subscriptionActive && withinAllowance) || hasCredits || freeCorrection\n);\n\n// Decided once here so the charge and the refund can never disagree.\nconst shouldCharge = allowed && !subscriptionActive && (!isCorrection || !freeCorrection);\n\nreturn [{\n  json: {\n    allowed,\n    should_charge: shouldCharge,\n    owns_render: ownsRender,\n    rows_exist: rowsExist,\n    is_correction: isCorrection,\n    free_correction: freeCorrection,\n    subscription_active: subscriptionActive,\n    over_allowance: overAllowance,\n    period_used: used,\n    period_allowance: allowance\n  }\n}];"
       },
       "id": "compute_access",
       "name": "Compute Access",
@@ -117,12 +108,12 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/renders?id=eq.{{ $('Webhook').item.json.body.render_id }}",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?id=eq.{{ $('Webhook').item.json.body.render_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
             { "name": "Prefer", "value": "return=minimal" }
           ]
         },
@@ -136,7 +127,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [-740, 260],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
     },
     {
       "parameters": {
@@ -175,14 +169,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/decrement_credit",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
-          ]
-        },
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/rpc/decrement_credit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { \"uid\": $('Webhook').item.json.body.user_id } }}",
@@ -192,7 +181,10 @@
       "name": "Deduct Credit",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-520, -180]
+      "position": [-520, -180],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
     },
     {
       "parameters": {
@@ -206,7 +198,6 @@
     },
     {
       "parameters": {
-        "method": "GET",
         "url": "={{ $json.init_image_url }}",
         "options": {
           "response": { "response": { "responseFormat": "file", "outputPropertyName": "original" } }
@@ -223,12 +214,8 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.dezgo.com/image2image_flux_2",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-Dezgo-Key", "value": "={{ $env.DEZGO_API_KEY }}" }
-          ]
-        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
@@ -248,7 +235,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [140, -80],
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": { "id": "paintrz-dezgo-key", "name": "Paintrz Dezgo API key" }
+      }
     },
     {
       "parameters": {
@@ -264,12 +254,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/storage/v1/object/photos/{{ $json.render_id }}/{{ $json.variant }}.jpg",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/storage/v1/object/photos/{{ $json.render_id }}/{{ $json.variant }}.jpg",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
             { "name": "Content-Type", "value": "image/jpeg" },
             { "name": "x-upsert", "value": "true" }
           ]
@@ -284,23 +274,26 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [580, -80],
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
     },
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/renders?id=eq.{{ $('Build Prompt').item.json.render_id }}",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?id=eq.{{ $('Build Prompt').item.json.render_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
             { "name": "Prefer", "value": "return=minimal" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"rendered_photo_url\": $env.SUPABASE_URL + \"/storage/v1/object/public/photos/\" + $('Build Prompt').item.json.render_id + \"/render.jpg\", \"branded_photo_url\": $env.SUPABASE_URL + \"/storage/v1/object/public/photos/\" + $('Build Prompt').item.json.render_id + \"/branded.jpg\", \"status\": \"done\", \"corrections_used\": $('Build Prompt').item.json.is_correction ? ($('Build Prompt').item.json.corrections_used + 1) : $('Build Prompt').item.json.corrections_used } }}",
+        "jsonBody": "={{ { \"rendered_photo_url\": \"https://pwkrwyemkjlmjdacelyi.supabase.co/storage/v1/object/public/photos/\" + $('Build Prompt').item.json.render_id + \"/render.jpg\", \"branded_photo_url\": \"https://pwkrwyemkjlmjdacelyi.supabase.co/storage/v1/object/public/photos/\" + $('Build Prompt').item.json.render_id + \"/branded.jpg\", \"status\": \"done\", \"corrections_used\": $('Build Prompt').item.json.is_correction ? ($('Build Prompt').item.json.corrections_used + 1) : $('Build Prompt').item.json.corrections_used } }}",
         "options": {}
       },
       "id": "update_render_row",
@@ -308,7 +301,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [800, -80],
-      "executeOnce": true
+      "executeOnce": true,
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
     },
     {
       "parameters": {
@@ -325,12 +321,12 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/renders?id=eq.{{ $('Webhook').item.json.body.render_id }}",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?id=eq.{{ $('Webhook').item.json.body.render_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
             { "name": "Prefer", "value": "return=minimal" }
           ]
         },
@@ -345,7 +341,10 @@
       "typeVersion": 4.2,
       "position": [580, 260],
       "onError": "continueRegularOutput",
-      "executeOnce": true
+      "executeOnce": true,
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
     },
     {
       "parameters": {
@@ -372,14 +371,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/increment_credits",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
-          ]
-        },
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/rpc/increment_credits",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { \"uid\": $('Webhook').item.json.body.user_id, \"amount\": 1 } }}",
@@ -391,7 +385,10 @@
       "typeVersion": 4.2,
       "position": [1020, 180],
       "onError": "continueRegularOutput",
-      "executeOnce": true
+      "executeOnce": true,
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
     },
     {
       "parameters": {
@@ -407,35 +404,48 @@
     },
     {
       "parameters": {
-        "content": "## Setup — environment variables\n- `SUPABASE_URL`\n- `SUPABASE_SERVICE_ROLE_KEY`  (service role, NOT the anon key)\n- `DEZGO_API_KEY`\n\nThe schema needs both `decrement_credit(uid)` and `increment_credits(uid, amount)` — the refund path uses the second one.\n\nThe `photos` bucket must be **public**, or the `/public/` URLs written back will 404 even on a successful render.",
-        "height": 300,
-        "width": 380,
+        "content": "## Credentials, not environment variables\nThis workflow uses **no `$env` at all**.\n\n- **Paintrz Supabase service role** — a *Custom Auth* credential carrying both headers:\n  `{ \"headers\": { \"apikey\": \"<service-role>\", \"Authorization\": \"Bearer <service-role>\" } }`\n- **Paintrz Dezgo API key** — a *Header Auth* credential: name `X-Dezgo-Key`, value the Dezgo key.\n\nWhy: env vars are global to every node and every workflow, and reading them from a Code node needs `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, which exposes **every** secret to **every** Code node. Credentials are scoped per node, are never readable from Code, and rotate in one place with no redeploy.\n\nThe Supabase URL is hardcoded because it is not a secret — it is already public in app.html.",
+        "height": 320,
+        "width": 400,
         "color": 5
       },
-      "id": "sticky_env",
-      "name": "Sticky — Env Vars",
+      "id": "sticky_creds",
+      "name": "Sticky — Credentials",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-1840, -440]
+      "position": [-1840, -460]
     },
     {
       "parameters": {
-        "content": "## Credit is taken BEFORE the render\nThe balance is checked and charged up front, so two submissions racing on one credit can't both pass. If any step then fails, the failure path refunds it.\n\nCharging afterwards left a ~10s window where both requests saw the same balance and both rendered.",
-        "height": 240,
-        "width": 360,
+        "content": "## Still needs jimp\n`NODE_FUNCTION_ALLOW_EXTERNAL=jimp` plus `npm install jimp` in the container. That one is an *external package* allowance, which is unrelated to the env-access flag and is safe to keep.\n\nThe schema needs `decrement_credit(uid)` and `increment_credits(uid, amount)` — the refund path uses the second.\n\nThe `photos` bucket must be **public**, or the `/public/` URLs written back will 404.",
+        "height": 260,
+        "width": 380,
+        "color": 4
+      },
+      "id": "sticky_env",
+      "name": "Sticky — Runtime Requirements",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-1400, -460]
+    },
+    {
+      "parameters": {
+        "content": "## Credit is taken BEFORE the render\nChecked and charged up front, so two submissions racing on one credit can't both pass. If any step then fails, the failure path refunds it.",
+        "height": 200,
+        "width": 340,
         "color": 7
       },
       "id": "sticky_credit",
       "name": "Sticky — Credit Ordering",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-740, -460]
+      "position": [-740, -440]
     },
     {
       "parameters": {
-        "content": "## Two images per render\n`render.jpg` — corrected, **no branding**\n`branded.jpg` — corrected + logo/contact\n\nCorrections re-render from `render.jpg`. Pointing them at the branded copy stamped the logo again on every correction, compounding each time.",
-        "height": 240,
-        "width": 360,
+        "content": "## Two images per render\n`render.jpg` — corrected, **no branding**\n`branded.jpg` — corrected + logo/contact\n\nCorrections re-render from `render.jpg`. Pointing them at the branded copy stamped the logo again on every correction.",
+        "height": 220,
+        "width": 340,
         "color": 4
       },
       "id": "sticky_variants",
