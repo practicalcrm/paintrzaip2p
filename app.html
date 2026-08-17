@@ -130,7 +130,40 @@ outline is what separates a card from the background rather than contrast. */
 #app .swatch{background:rgba(255,255,255,0.92);}
 #app .family-tile, #app .history-item{background:rgba(255,255,255,0.92);}
 #app .upload-drop{color:var(--muted);}
-#brandMark img{height:26px; width:auto; display:block;}
+#brandMark img{height:34px; width:auto; display:block;}
+.brand-block{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.brand-contact{font-size:12px; color:var(--muted-2); font-family:'JetBrains Mono'; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.brand-contact:empty{display:none;}
+.header-actions{display:flex; align-items:center; gap:12px;}
+.icon-btn{display:none; background:transparent; border:1px solid var(--line); color:inherit; border-radius:10px; width:42px; height:42px; font-size:17px; cursor:pointer; line-height:1; flex:none;}
+
+/* The main CTA — full width and centred, not a small left-hugging button. */
+#submitRenderBtn{display:block; width:100%; max-width:460px; margin:0 auto; padding:16px 24px; font-size:16px;}
+#renderStatus{text-align:center;}
+
+/* Slide-out menu. On a phone the header could not hold logo + credits +
+client mode + log out without every label wrapping onto three lines. */
+#sideMenu{position:fixed; inset:0; z-index:60;}
+.side-backdrop{position:absolute; inset:0; background:rgba(10,20,19,0.45);}
+.side-panel{position:absolute; top:0; right:0; height:100%; width:264px; max-width:80vw; background:rgba(255,255,255,0.96); border-left:1px solid var(--line); padding:18px; display:flex; flex-direction:column; gap:14px;}
+.side-close{align-self:flex-end; background:none; border:none; font-size:24px; line-height:1; cursor:pointer; color:var(--muted-2);}
+.side-credits{font-family:'JetBrains Mono'; font-size:13px; color:var(--teal); border:1px solid var(--line); border-radius:10px; padding:11px 12px; text-align:center;}
+
+@media (max-width:720px){
+.icon-btn{display:inline-flex; align-items:center; justify-content:center;}
+#app header .wrap{gap:12px;}
+/* These two move into the slide-out menu. */
+#creditsPill, #logoutBtn{display:none;}
+#brandMark{font-size:20px;}
+#brandMark img{height:46px;}
+#brandMark.logo-placeholder{font-size:13px; padding:8px 10px;}
+.brand-contact{font-size:12.5px;}
+nav.tabs{gap:6px;}
+nav.tabs button{flex:1; padding:11px 6px; font-size:12.5px; text-align:center;}
+}
+
+/* A client must not be able to reach the account menu at all. */
+#app.client-mode #menuBtn{display:none !important;}
 #brandMark.logo-placeholder{color:var(--muted-2); font-weight:600; font-size:14px; letter-spacing:0.02em; border:1px dashed var(--line); padding:5px 10px; border-radius:8px;}
 /* ---- client mode ----------------------------------------------------
 Handed to a homeowner mid-appointment: the contractor's logo leads, account
@@ -220,14 +253,29 @@ link just signed people in and never asked for a new password. -->
 <header>
 <div class="wrap">
 <button class="btn btn-ghost" id="exitClientBtn" title="Back to your account">‹ Back</button>
+<button class="icon-btn" id="menuBtn" aria-label="Menu" title="Menu">&#9776;</button>
+<div class="brand-block">
 <div class="brand" id="brandMark">PAINTR<span class="z">Z</span></div>
-<div style="display:flex; align-items:center; gap:12px;" id="headerActions">
+<div class="brand-contact" id="brandContact"></div>
+</div>
+<div class="header-actions" id="headerActions">
 <span class="credits-pill" id="creditsPill">— credits</span>
 <button class="btn btn-ghost" id="clientModeBtn" title="Hand the screen to your client">Client mode</button>
 <button class="btn btn-ghost" id="logoutBtn">Log out</button>
 </div>
 </div>
 </header>
+
+<!-- Account bits that don't fit a phone header. Hidden entirely in client mode
+so a homeowner can't reach the account from here. -->
+<div id="sideMenu" class="hidden">
+<div class="side-backdrop" id="sideBackdrop"></div>
+<aside class="side-panel">
+<button class="side-close" id="sideClose" aria-label="Close menu">&times;</button>
+<div class="side-credits" id="sideCredits">—</div>
+<button class="btn btn-ghost" id="sideLogoutBtn">Log out</button>
+</aside>
+</div>
 
 <div class="wrap">
 <nav class="tabs">
@@ -529,6 +577,9 @@ const WHITE_LABEL_PLANS = ['pro', 'studio'];
 
 function applyHeaderBranding(){
 const mark = document.getElementById('brandMark');
+// Contact line sits under the logo — a homeowner looking at the screen should
+// see who to call without asking.
+document.getElementById('brandContact').textContent = currentProfile.brand_contact || '';
 const plan = (currentProfile.subscription_plan || '').trim().toLowerCase();
 const onTopTier = currentProfile.subscription_status === 'active' &&
 WHITE_LABEL_PLANS.some(p => plan.includes(p));
@@ -1146,12 +1197,26 @@ let clientMode = false;
 function setClientMode(on){
 clientMode = on;
 document.getElementById('app').classList.toggle('client-mode', on);
+openSideMenu(false); // never leave the account menu open behind client mode
 if (on){
 // Never hand over the screen sitting on the settings tab.
 document.querySelector('nav.tabs button[data-tab="render"]').click();
 }
 loadHistory();
 }
+
+// ---------- SIDE MENU ----------
+function openSideMenu(on){
+document.getElementById('sideMenu').classList.toggle('hidden', !on);
+if (on) document.getElementById('sideCredits').textContent = document.getElementById('creditsPill').textContent;
+}
+document.getElementById('menuBtn').addEventListener('click', () => openSideMenu(true));
+document.getElementById('sideClose').addEventListener('click', () => openSideMenu(false));
+document.getElementById('sideBackdrop').addEventListener('click', () => openSideMenu(false));
+document.getElementById('sideLogoutBtn').addEventListener('click', async () => {
+await supa.auth.signOut();
+location.reload();
+});
 
 document.getElementById('clientModeBtn').addEventListener('click', () => setClientMode(true));
 document.getElementById('exitClientBtn').addEventListener('click', () => setClientMode(false));
