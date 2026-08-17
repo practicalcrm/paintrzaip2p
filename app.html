@@ -195,10 +195,21 @@ PHOTOS_BUCKET: "photos"
 <h1>PAINTR<span style="color:var(--teal)">Z</span></h1>
 <p id="loginIntro">See it finished before you sell it. Sign in to your account.</p>
 <input type="email" id="loginEmail" placeholder="you@company.com" autocomplete="email">
+<div id="signInPane">
 <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" style="width:100%; margin-top:12px;">
 <button class="btn btn-primary" id="signInBtn" style="width:100%; margin-top:14px;">Sign In</button>
 <button class="btn btn-ghost" id="createAccountBtn" style="width:100%; margin-top:8px;">Create Account</button>
 <p id="forgotPasswordLink" style="margin-top:14px; font-size:13px; color:var(--muted); cursor:pointer; text-decoration:underline;">Forgot password?</p>
+</div>
+
+<!-- Shown only when arriving from a reset email. Without this the recovery
+link just signed people in and never asked for a new password. -->
+<div id="resetPane" class="hidden">
+<input type="password" id="newPassword" placeholder="New password" autocomplete="new-password" style="width:100%;">
+<input type="password" id="newPassword2" placeholder="Repeat new password" autocomplete="new-password" style="width:100%; margin-top:12px;">
+<button class="btn btn-primary" id="setPasswordBtn" style="width:100%; margin-top:14px;">Save new password</button>
+</div>
+
 <div id="loginMsg"></div>
 </div>
 </div>
@@ -445,16 +456,71 @@ await supa.auth.signOut();
 location.reload();
 });
 
-async function initAuth(){
+// ---------- PASSWORD RESET ----------
+let inPasswordRecovery = false;
+
+function showResetPane(email){
+inPasswordRecovery = true;
+document.getElementById('loginScreen').classList.remove('hidden');
+document.getElementById('app').classList.add('hidden');
+document.getElementById('signInPane').classList.add('hidden');
+document.getElementById('resetPane').classList.remove('hidden');
+document.getElementById('loginEmail').classList.add('hidden');
+document.getElementById('loginIntro').textContent = email
+? `Choose a new password for ${email}.`
+: 'Choose a new password for your account.';
+document.getElementById('loginMsg').textContent = '';
+}
+
+document.getElementById('setPasswordBtn').addEventListener('click', async () => {
+const msg = document.getElementById('loginMsg');
+const pw = document.getElementById('newPassword').value;
+const pw2 = document.getElementById('newPassword2').value;
+if (pw.length < 6){ msg.textContent = 'Password must be at least 6 characters.'; return; }
+if (pw !== pw2){ msg.textContent = "Those two passwords don't match."; return; }
+msg.textContent = 'Saving your new password…';
+const { error } = await supa.auth.updateUser({ password: pw });
+if (error){ msg.textContent = error.message; return; }
+// Clear the recovery token out of the URL so a refresh doesn't re-trigger this.
+history.replaceState(null, '', window.location.pathname);
+inPasswordRecovery = false;
+msg.textContent = 'Password updated.';
 const { data: { session } } = await supa.auth.getSession();
+if (session){ currentUser = session.user; await loadProfile(); showApp(); }
+});
+
+document.getElementById('newPassword2').addEventListener('keydown', (e) => {
+if (e.key === 'Enter') document.getElementById('setPasswordBtn').click();
+});
+
+async function initAuth(){
+// A recovery link lands here with type=recovery in the URL fragment. Check it
+// before the session lookup, or the recovery session just logs them straight
+// in and the password is never actually changed.
+const hash = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+const isRecoveryLink = hash.get('type') === 'recovery';
+
+supa.auth.onAuthStateChange((event, session) => {
+if (event === 'PASSWORD_RECOVERY'){
+showResetPane(session && session.user ? session.user.email : null);
+return;
+}
+if (event === 'SIGNED_IN' && !inPasswordRecovery){
+currentUser = session.user;
+loadProfile().then(showApp);
+}
+});
+
+const { data: { session } } = await supa.auth.getSession();
+if (isRecoveryLink){
+showResetPane(session && session.user ? session.user.email : null);
+return;
+}
 if (session){
 currentUser = session.user;
 await loadProfile();
 showApp();
 }
-supa.auth.onAuthStateChange((event, session) => {
-if (event === 'SIGNED_IN'){ currentUser = session.user; loadProfile().then(showApp); }
-});
 }
 
 // The two most expensive monthly plans include white-labeling, so their
