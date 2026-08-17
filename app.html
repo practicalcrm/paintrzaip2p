@@ -599,9 +599,15 @@ mark.classList.remove('logo-placeholder');
 }
 }
 
-// Monthly render allowance per plan. Subscriptions are NOT unlimited — the
-// pill used to claim they were, which is wrong on every tier.
-const PLAN_ALLOWANCE = { starter: 7, crew: 16, pro: 35, studio: 80 };
+// Monthly render allowance per plan. Studio is sold as unlimited but carries a
+// high ceiling so a single runaway account can't generate unbounded image-gen
+// spend — a user only ever meets it in genuinely abnormal use.
+const PLANS = {
+starter: { renders: 7,   unlimited: false },
+crew:    { renders: 16,  unlimited: false },
+pro:     { renders: 35,  unlimited: false },
+studio:  { renders: 300, unlimited: true }
+};
 
 // Renders left in the current period; null when it doesn't apply or is unknown.
 // Only a hint for the UI — the pipeline is what actually enforces the cap.
@@ -609,8 +615,9 @@ let periodRendersLeft = null;
 
 function planAllowance(planName){
 const p = (planName || '').trim().toLowerCase();
-const key = Object.keys(PLAN_ALLOWANCE).find(k => p.includes(k));
-return key ? { name: key.charAt(0).toUpperCase() + key.slice(1), renders: PLAN_ALLOWANCE[key] } : null;
+const key = Object.keys(PLANS).find(k => p.includes(k));
+if (!key) return null;
+return { name: key.charAt(0).toUpperCase() + key.slice(1), renders: PLANS[key].renders, unlimited: PLANS[key].unlimited };
 }
 
 // Start of the current billing period: the most recent monthly anniversary of
@@ -662,7 +669,13 @@ const plan = subscribed ? planAllowance(currentProfile.subscription_plan) : null
 if (subscribed && plan){
 const periodStart = billingPeriodStart(currentProfile.subscription_started_at);
 const used = await rendersUsedThisPeriod(periodStart);
-if (used === null){
+if (plan.unlimited){
+// Sold as unlimited, so never show a countdown. The safety ceiling still
+// applies underneath but a normal user never sees it.
+periodRendersLeft = (used === null) ? null : Math.max(0, plan.renders - used);
+pill.textContent = 'Unlimited';
+planEl.textContent = `${plan.name} — unlimited renders.`;
+} else if (used === null){
 // No anchor yet (or the count failed) — state the allowance, don't guess usage.
 pill.textContent = `${plan.name} — ${plan.renders}/mo`;
 planEl.textContent = `${plan.name} — ${plan.renders} renders per month.`;
