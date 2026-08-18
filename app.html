@@ -162,14 +162,19 @@ nav.tabs{gap:6px;}
 nav.tabs button{flex:1; padding:11px 6px; font-size:12.5px; text-align:center;}
 }
 
-/* A client must not be able to reach the account menu at all. */
-#app.client-mode #menuBtn{display:none !important;}
 #brandMark.logo-placeholder{color:var(--muted-2); font-weight:600; font-size:14px; letter-spacing:0.02em; border:1px dashed var(--line); padding:5px 10px; border-radius:8px;}
 /* ---- client mode ----------------------------------------------------
 Handed to a homeowner mid-appointment: the contractor's logo leads, account
-controls and billing are gone, and history is scoped to this visit only. */
+controls and billing are gone, and history is scoped to this visit only.
+
+The way out lives in the slide-out menu and is PIN-gated — there is nothing
+on screen for a client to tap that reaches the account. The menu button is
+forced visible at every width here; outside client mode it is a phone-only
+control, and without this there would be no exit at all on a laptop. */
+#app.client-mode #menuBtn{display:inline-flex !important; align-items:center; justify-content:center;}
+#app.client-mode #sideCredits, #app.client-mode #sideLogoutBtn{display:none !important;}
 #exitClientBtn{display:none;}
-#app.client-mode #exitClientBtn{display:inline-block;}
+#app.client-mode #exitClientBtn{display:block; width:100%;}
 #app.client-mode #headerActions{display:none !important;}
 #app.client-mode nav.tabs button[data-tab="settings"]{display:none;}
 /* Nothing about cost, credits or allowances in front of a homeowner. */
@@ -178,6 +183,17 @@ controls and billing are gone, and history is scoped to this visit only. */
 #app.client-mode #brandMark{flex:1; text-align:center; font-size:22px;}
 #app.client-mode #brandMark img{height:40px; margin:0 auto;}
 #app.client-mode header{padding:20px 0;}
+
+/* PIN gate — stands between client mode and the account. */
+#pinModal{position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center;}
+#pinModal.hidden{display:none;}
+.pin-backdrop{position:absolute; inset:0; background:rgba(10,20,19,0.55);}
+.pin-card{position:relative; background:#fff; border-radius:14px; padding:22px; width:300px; max-width:88vw; display:flex; flex-direction:column; gap:11px; text-align:center;}
+.pin-card h3{margin:0; font-size:16px; color:#122120;}
+.pin-card p{margin:0; font-size:12.5px; color:var(--muted-2); line-height:1.5;}
+#pinInput{font-family:'JetBrains Mono'; font-size:23px; letter-spacing:0.4em; text-align:center; padding:12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:#122120;}
+#pinError{font-size:12px; color:#B3413A; min-height:15px;}
+#pinForgot{background:none; border:none; font-size:12px; color:var(--muted-2); text-decoration:underline; cursor:pointer;}
 
 /* settings: logo picker */
 .logo-row{display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:10px;}
@@ -252,7 +268,6 @@ link just signed people in and never asked for a new password. -->
 <div id="appBg"></div>
 <header>
 <div class="wrap">
-<button class="btn btn-ghost" id="exitClientBtn" title="Back to your account">‹ Back</button>
 <button class="icon-btn" id="menuBtn" aria-label="Menu" title="Menu">&#9776;</button>
 <div class="brand-block">
 <div class="brand" id="brandMark">PAINTR<span class="z">Z</span></div>
@@ -266,15 +281,29 @@ link just signed people in and never asked for a new password. -->
 </div>
 </header>
 
-<!-- Account bits that don't fit a phone header. Hidden entirely in client mode
-so a homeowner can't reach the account from here. -->
+<!-- Account bits that don't fit a phone header. In client mode this menu holds
+nothing but the PIN-gated way out — credits and log out are hidden. -->
 <div id="sideMenu" class="hidden">
 <div class="side-backdrop" id="sideBackdrop"></div>
 <aside class="side-panel">
 <button class="side-close" id="sideClose" aria-label="Close menu">&times;</button>
 <div class="side-credits" id="sideCredits">—</div>
 <button class="btn btn-ghost" id="sideLogoutBtn">Log out</button>
+<button class="btn btn-ghost" id="exitClientBtn">Exit client mode</button>
 </aside>
+</div>
+
+<div id="pinModal" class="hidden">
+<div class="pin-backdrop" id="pinBackdrop"></div>
+<div class="pin-card">
+<h3 id="pinTitle">Enter your PIN</h3>
+<p id="pinHint"></p>
+<input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="PIN">
+<div id="pinError"></div>
+<button class="btn btn-primary" id="pinSubmit">Continue</button>
+<button class="btn btn-ghost" id="pinCancel">Cancel</button>
+<button id="pinForgot">Forgot PIN — sign out instead</button>
+</div>
 </div>
 
 <div class="wrap">
@@ -424,6 +453,15 @@ model guesses, and a wrong guess costs the user a real credit. -->
 <button class="btn btn-primary" id="saveSettingsBtn" style="margin-top:20px;">Save branding</button>
 <div class="status-line" id="settingsStatus"></div>
 </div>
+<div class="card">
+<h3 style="margin-bottom:8px;">Client mode PIN</h3>
+<p class="status-line" id="pinStatus">—</p>
+<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
+<button type="button" class="btn btn-ghost" id="pinChangeBtn">Set a new PIN</button>
+<button type="button" class="btn btn-ghost hidden" id="pinClearBtn">Clear PIN</button>
+</div>
+<div class="status-line" style="margin-top:10px;">This is what stops a client handing the phone back into your account. It's kept on this device, so set one on each phone or tablet you hand over. Clear it and you'll be asked for a new one next time you start client mode.</div>
+</div>
 </section>
 </div>
 </div>
@@ -437,6 +475,22 @@ let selectedColors = []; // up to 3 × { key, hex, name, code, brand }
 let selectedFile = null;
 let currentRenderId = null;
 let correctionsUsed = 0;
+
+// Storage keys for client mode. Wrapped because some browsers — private
+// windows, embedded webviews, storage switched off — throw on any storage
+// access at all. These reads run at load, so an unguarded throw would take
+// the whole app down instead of just costing client mode its persistence.
+const CLIENT_MODE_KEY  = 'paintrz.clientMode';
+const VISIT_RENDER_KEY = 'paintrz.visitRenders';
+const CLIENT_PIN_KEY   = 'paintrz.clientPin';
+const store = {
+get(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } },
+set(k, v){ try { sessionStorage.setItem(k, v); } catch(e){} },
+del(k){ try { sessionStorage.removeItem(k); } catch(e){} },
+getLocal(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+setLocal(k, v){ try { localStorage.setItem(k, v); } catch(e){} },
+delLocal(k){ try { localStorage.removeItem(k); } catch(e){} }
+};
 
 // ---------- AUTH ----------
 document.getElementById('signInBtn').addEventListener('click', async () => {
@@ -697,8 +751,16 @@ planEl.textContent = `Pay as you go — ${c} render credit${c === 1 ? '' : 's'} 
 }
 
 function showApp(){
+const app = document.getElementById('app');
+// Restore client mode before the app is unhidden, so a reload in front of a
+// homeowner never flashes the account behind it.
+if (store.get(CLIENT_MODE_KEY) === '1'){
+clientMode = true;
+app.classList.add('client-mode');
+}
 document.getElementById('loginScreen').classList.add('hidden');
-document.getElementById('app').classList.remove('hidden');
+app.classList.remove('hidden');
+if (clientMode) document.querySelector('nav.tabs button[data-tab="render"]').click();
 loadHistory();
 }
 
@@ -1090,7 +1152,7 @@ status: 'processing'
 }).select().single();
 if (renderErr){ statusEl.textContent = 'Could not start render: ' + renderErr.message; return; }
 currentRenderId = renderRow.id;
-sessionRenderIds.push(renderRow.id);
+rememberVisitRender(renderRow.id);
 correctionsUsed = 0;
 
 statusEl.textContent = 'Rendering — this takes about 10 seconds…';
@@ -1204,12 +1266,25 @@ a.click();
 // ---------- CLIENT MODE ----------
 // Renders produced during this visit. Client mode shows only these, so a
 // homeowner never sees another customer's job in the history.
+//
+// State lives in sessionStorage rather than a variable because client mode has
+// to survive a reload. A homeowner holding the phone can pull-to-refresh
+// without meaning anything by it, and if that dropped the app back to the
+// account then hiding the exit would be decoration.
 let sessionRenderIds = [];
+try { sessionRenderIds = JSON.parse(store.get(VISIT_RENDER_KEY) || '[]'); } catch(e){ sessionRenderIds = []; }
 let clientMode = false;
+
+function rememberVisitRender(id){
+sessionRenderIds.push(id);
+store.set(VISIT_RENDER_KEY, JSON.stringify(sessionRenderIds));
+}
 
 function setClientMode(on){
 clientMode = on;
 document.getElementById('app').classList.toggle('client-mode', on);
+if (on) store.set(CLIENT_MODE_KEY, '1');
+else store.del(CLIENT_MODE_KEY);
 openSideMenu(false); // never leave the account menu open behind client mode
 if (on){
 // Never hand over the screen sitting on the settings tab.
@@ -1217,6 +1292,75 @@ document.querySelector('nav.tabs button[data-tab="render"]').click();
 }
 loadHistory();
 }
+
+// ---------- CLIENT MODE PIN ----------
+// Set the first time client mode is used — while the contractor is still the
+// one holding the phone — and checked on the way out. Kept on this device
+// only: the thing being guarded against is the person standing in the room,
+// so there is nothing worth syncing to an account.
+let pinPurpose = null;
+const pinIsSet = () => !!store.getLocal(CLIENT_PIN_KEY);
+
+function openPin(purpose){
+pinPurpose = purpose;
+const setting = purpose !== 'verify';
+document.getElementById('pinTitle').textContent = setting ? 'Set a 4-digit PIN' : 'Enter your PIN';
+document.getElementById('pinHint').textContent = setting
+? 'You will need this to get back to your account. Your client should not see you type it.'
+: 'This unlocks your account again.';
+document.getElementById('pinError').textContent = '';
+const input = document.getElementById('pinInput');
+input.value = '';
+document.getElementById('pinModal').classList.remove('hidden');
+input.focus();
+}
+
+function closePin(){
+document.getElementById('pinModal').classList.add('hidden');
+pinPurpose = null;
+}
+
+function submitPin(){
+const input = document.getElementById('pinInput');
+const err = document.getElementById('pinError');
+const val = input.value.trim();
+if (!/^\d{4}$/.test(val)){ err.textContent = 'Four digits.'; return; }
+if (pinPurpose === 'set'){
+store.setLocal(CLIENT_PIN_KEY, val);
+closePin();
+setClientMode(true);
+} else if (pinPurpose === 'reset'){
+// Reached only from Settings, which a client can't get to — they'd need the
+// old PIN or the account password to be out of client mode in the first place.
+store.setLocal(CLIENT_PIN_KEY, val);
+closePin();
+refreshPinStatus();
+document.getElementById('settingsStatus').textContent = 'PIN updated on this device.';
+} else {
+if (store.getLocal(CLIENT_PIN_KEY) !== val){
+err.textContent = 'Wrong PIN.'; input.value = ''; input.focus(); return;
+}
+closePin();
+setClientMode(false);
+}
+}
+
+// Settings-side management, so a forgotten PIN is self-service rather than a
+// support call.
+function refreshPinStatus(){
+const set = pinIsSet();
+document.getElementById('pinStatus').textContent = set
+? 'A PIN is set on this device.'
+: 'No PIN yet — you\'ll be asked to pick one the first time you start client mode.';
+document.getElementById('pinChangeBtn').textContent = set ? 'Change PIN' : 'Set a PIN';
+document.getElementById('pinClearBtn').classList.toggle('hidden', !set);
+}
+document.getElementById('pinChangeBtn').addEventListener('click', () => openPin('reset'));
+document.getElementById('pinClearBtn').addEventListener('click', () => {
+store.delLocal(CLIENT_PIN_KEY);
+refreshPinStatus();
+document.getElementById('settingsStatus').textContent = 'PIN cleared. You\'ll set a new one next time you start client mode.';
+});
 
 // ---------- SIDE MENU ----------
 function openSideMenu(on){
@@ -1231,16 +1375,42 @@ await supa.auth.signOut();
 location.reload();
 });
 
-document.getElementById('clientModeBtn').addEventListener('click', () => setClientMode(true));
-document.getElementById('exitClientBtn').addEventListener('click', () => setClientMode(false));
+document.getElementById('clientModeBtn').addEventListener('click', () => {
+if (pinIsSet()) setClientMode(true); else openPin('set');
+});
+document.getElementById('exitClientBtn').addEventListener('click', () => openPin('verify'));
+document.getElementById('pinSubmit').addEventListener('click', submitPin);
+document.getElementById('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') submitPin(); });
+document.getElementById('pinCancel').addEventListener('click', closePin);
+document.getElementById('pinBackdrop').addEventListener('click', closePin);
+// Safe to expose to whoever is holding the phone: it lands on the login
+// screen, which is worth nothing without the password.
+document.getElementById('pinForgot').addEventListener('click', async () => {
+store.del(CLIENT_MODE_KEY);
+store.del(VISIT_RENDER_KEY);
+await supa.auth.signOut();
+location.reload();
+});
 
 // ---------- HISTORY ----------
 async function loadHistory(){
-const { data } = await supa.from('renders').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
 const grid = document.getElementById('historyGrid');
+// In client mode only this visit's renders are FETCHED. Filtering the full
+// list in the browser would still have pulled every other customer's job
+// into the page, and those photo URLs are publicly readable.
+let rows = [];
+if (clientMode){
+if (sessionRenderIds.length){
+const { data } = await supa.from('renders').select('*').eq('user_id', currentUser.id)
+.in('id', sessionRenderIds).order('created_at', { ascending: false });
+rows = data || [];
+}
+} else {
+const { data } = await supa.from('renders').select('*').eq('user_id', currentUser.id)
+.order('created_at', { ascending: false });
+rows = data || [];
+}
 grid.innerHTML = '';
-let rows = data || [];
-if (clientMode) rows = rows.filter(r => sessionRenderIds.includes(r.id));
 if (clientMode && !rows.length){
 grid.innerHTML = '<div class="status-line">Renders from this visit will appear here.</div>';
 }
@@ -1480,6 +1650,7 @@ document.getElementById('setCompany').value = currentProfile.company_name || '';
 document.getElementById('setContact').value = currentProfile.brand_contact || '';
 setLogoPreview(currentProfile.brand_logo_url || null);
 document.getElementById('settingsStatus').textContent = '';
+refreshPinStatus();
 pendingLogoFile = null;
 pendingLogoRemoval = false;
 }
