@@ -1353,7 +1353,7 @@ if (version >= 2){ // single alignment pattern for v2–v6
 const a = size - 7;
 for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++){
 const edge = Math.abs(dr) === 2 || Math.abs(dc) === 2;
-put(6 + dr, a + dc, (edge || (dr === 0 && dc === 0)) ? 1 : 0);
+put(a + dr, a + dc, (edge || (dr === 0 && dc === 0)) ? 1 : 0);
 }
 }
 m[size - 8][8] = 1; // dark module
@@ -1421,12 +1421,16 @@ free.forEach(([r, c], i) => { if (maskFns[mask](r, c)) g[r][c] ^= 1; });
 const fmt = FORMAT_M[mask];
 for (let i = 0; i < 15; i++){
 const bit = (fmt >> i) & 1;
-if (i < 6) g[8][i] = bit;
-else if (i < 8) g[8][i + 1] = bit;
-else if (i === 8) g[7][8] = bit;
-else g[14 - i][8] = bit;
-if (i < 8) g[size - 1 - i][8] = bit;
-else g[8][size - 15 + i] = bit;
+// Per ISO 18004: copy 1 runs down column 8 (bits 0-7), then left along
+// row 8 (bits 9-14); copy 2 runs left along row 8 (bits 0-7), then down
+// column 8 (bits 8-14). Both arms skip the timing row/column.
+if (i < 6) g[i][8] = bit;
+else if (i === 6) g[7][8] = bit;
+else if (i === 7) g[8][8] = bit;
+else if (i === 8) g[8][7] = bit;
+else g[8][14 - i] = bit;
+if (i < 8) g[8][size - 1 - i] = bit;
+else g[size - 15 + i][8] = bit;
 }
 g[size - 8][8] = 1;
 const s = penalty(g);
