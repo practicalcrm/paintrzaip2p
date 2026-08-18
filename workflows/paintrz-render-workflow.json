@@ -27,7 +27,7 @@
       "typeVersion": 4.2,
       "position": [-1620, 0],
       "credentials": {
-        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
       }
     },
     {
@@ -43,7 +43,7 @@
       "typeVersion": 4.2,
       "position": [-1400, 0],
       "credentials": {
-        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
       }
     },
     {
@@ -70,7 +70,7 @@
       "position": [-1180, 160],
       "onError": "continueRegularOutput",
       "credentials": {
-        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
       }
     },
     {
@@ -129,7 +129,7 @@
       "position": [-740, 260],
       "onError": "continueRegularOutput",
       "credentials": {
-        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
       }
     },
     {
@@ -183,7 +183,7 @@
       "typeVersion": 4.2,
       "position": [-520, -180],
       "credentials": {
-        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
       }
     },
     {
@@ -276,7 +276,7 @@
       "position": [580, -80],
       "onError": "continueErrorOutput",
       "credentials": {
-        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
       }
     },
     {
@@ -303,7 +303,7 @@
       "position": [800, -80],
       "executeOnce": true,
       "credentials": {
-        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
       }
     },
     {
@@ -343,7 +343,7 @@
       "onError": "continueRegularOutput",
       "executeOnce": true,
       "credentials": {
-        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
       }
     },
     {
@@ -387,7 +387,7 @@
       "onError": "continueRegularOutput",
       "executeOnce": true,
       "credentials": {
-        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
       }
     },
     {
