@@ -1,0 +1,267 @@
+{
+  "name": "Paintrz — Stripe Billing (Trigger)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Stripe billing, rebuilt on the native Trigger\n\nReplaces **Paintrz — Stripe Billing Webhook** and its custom `Verify Signature` Code node.\n\n### Why this exists\nThe old workflow verified Stripe's HMAC by hand in a Code node. That needed `crypto` (fixed) and then needed to read `STRIPE_WEBHOOK_SECRET` from the environment, which needed `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` — a flag that opens **every** env var to **every** Code node, including the Supabase service-role key.\n\nThe Stripe Trigger verifies signatures internally. No Code-node crypto, no env access, no flag, and no webhook secret to rotate.\n\n### Cutover\n1. Create a **Stripe API** credential (`sk_live_…`) and attach it to the Trigger.\n2. Publish this workflow. The Trigger registers its own endpoint in Stripe automatically.\n3. Delete the old `dynamic-radiance` destination in Stripe, and unpublish the old workflow.\n4. Delete the `STRIPE_WEBHOOK_SECRET` env var from Railway — nothing reads it any more.",
+        "height": 480,
+        "width": 420
+      },
+      "id": "note_overview",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-1600, -560]
+    },
+    {
+      "parameters": {
+        "content": "## Both pending fixes are already in here\n\n**1. Credit maths.** The old node computed `amount_total / 85`. Automatic tax makes `amount_total` unusable — a single 85c credit arrives as 90c, and `90/85 = 1.0588`, so the credit silently vanished. That is the bug behind the real payment that never credited.\n\nThis uses `Math.floor(amount_subtotal / 85)`. `amount_subtotal` is pre-tax, so it is exact at any quantity up to the payment link's 99, and immune to future tax-rate changes.\n\n**2. `subscription_started_at`.** Nothing ever wrote it, so every subscriber had `null` and the pipeline — which deliberately fails open on a missing anchor — never enforced an allowance. `Activate Subscription` now sets it.",
+        "height": 400,
+        "width": 400
+      },
+      "id": "note_fixes",
+      "name": "Fixes note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-1600, -50]
+    },
+    {
+      "parameters": {
+        "content": "### Renewals\nThe old destination listened only for `checkout.session.completed` and `customer.subscription.deleted`, so renewals were invisible.\n\n`invoice.paid` is included here, but it deliberately does **not** rewrite `subscription_started_at`. The allowance period rolls on monthly anniversaries of the original start date; rewriting the anchor each invoice would hand the customer a fresh allowance every month on top of the one they already have.\n\nIt only re-asserts `active`, which is what makes a recovered failed payment behave sanely.",
+        "height": 320,
+        "width": 380
+      },
+      "id": "note_renewals",
+      "name": "Renewals note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [520, 220]
+    },
+    {
+      "parameters": {
+        "events": [
+          "checkout.session.completed",
+          "customer.subscription.deleted",
+          "invoice.paid"
+        ]
+      },
+      "id": "stripe_trigger",
+      "name": "Stripe Trigger",
+      "type": "n8n-nodes-base.stripeTrigger",
+      "typeVersion": 1,
+      "position": [-1120, -180],
+      "credentials": {
+        "stripeApi": { "id": "paintrz-stripe-api", "name": "Paintrz Stripe API" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Classify the event and work out everything the Supabase calls need, so the\n// branches below stay dumb.\nconst ev = $input.first().json;\nconst type = ev.type;\nconst obj = (ev.data && ev.data.object) || {};\n\n// PAYGO is exactly 85c per render credit.\n//\n// The old workflow used amount_total, which includes automatic tax: a single\n// credit arrives as 90c and 90/85 = 1.0588, which floored to 1 only by luck and\n// broke outright at higher quantities (10 credits = 900c total, 900/85 = 10.58).\n// amount_subtotal is pre-tax, so it stays an exact multiple of 85 at any\n// quantity the payment link allows, and survives any future tax-rate change.\nfunction creditsFrom(session){\n  const sub = Number(session.amount_subtotal);\n  if (!Number.isFinite(sub) || sub <= 0) return 0;\n  return Math.floor(sub / 85);\n}\n\n// Matched on the pre-tax amount for the same reason.\nconst PLANS = [\n  { cents: 500,  name: 'Starter' },\n  { cents: 1000, name: 'Crew' },\n  { cents: 2000, name: 'Pro' },\n  { cents: 4000, name: 'Studio' }\n];\nfunction planFrom(cents){\n  const hit = PLANS.find(p => p.cents === Number(cents));\n  return hit ? hit.name : null;\n}\n\nlet out = { action: 'ignore', type: type };\n\nif (type === 'checkout.session.completed'){\n  const uid = obj.client_reference_id || null;\n  const customer = obj.customer || null;\n  if (obj.mode === 'payment'){\n    out = { action: 'credits', type, uid, customer, credits: creditsFrom(obj) };\n  } else if (obj.mode === 'subscription'){\n    const cents = obj.amount_subtotal != null ? obj.amount_subtotal : obj.amount_total;\n    out = { action: 'subscribe', type, uid, customer, plan: planFrom(cents) };\n  }\n} else if (type === 'customer.subscription.deleted'){\n  // Matched on stripe_customer_id, because a cancellation payload carries no\n  // client_reference_id the way a checkout session does.\n  out = { action: 'cancel', type, customer: obj.customer || null };\n} else if (type === 'invoice.paid'){\n  // Only real renewals. The first invoice of a subscription arrives as\n  // 'subscription_create' and is already handled by the checkout branch.\n  if (obj.billing_reason === 'subscription_cycle'){\n    out = { action: 'renew', type, customer: obj.customer || null };\n  }\n}\n\nreturn [{ json: out }];"
+      },
+      "id": "route_event",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-880, -180]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is_credits",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "credits",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is_credits",
+      "name": "Credit pack?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-620, -440]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is_subscribe",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "subscribe",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is_subscribe",
+      "name": "New subscription?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-620, -240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is_cancel",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "cancel",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is_cancel",
+      "name": "Cancellation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-620, -40]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is_renew",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "renew",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is_renew",
+      "name": "Renewal?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-620, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/rpc/increment_credits",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"uid\": $json.uid, \"amount\": $json.credits } }}",
+        "options": {}
+      },
+      "id": "add_credits",
+      "name": "Add Credits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-340, -440],
+      "credentials": {
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/profiles?id=eq.{{ $json.uid }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [ { "name": "Prefer", "value": "return=minimal" } ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"subscription_status\": \"active\", \"subscription_plan\": $json.plan, \"stripe_customer_id\": $json.customer, \"subscription_started_at\": $now.toISO() } }}",
+        "options": {}
+      },
+      "id": "activate_subscription",
+      "name": "Activate Subscription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-340, -240],
+      "credentials": {
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/profiles?stripe_customer_id=eq.{{ $json.customer }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [ { "name": "Prefer", "value": "return=minimal" } ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"subscription_status\": \"canceled\" } }}",
+        "options": {}
+      },
+      "id": "cancel_subscription",
+      "name": "Cancel Subscription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-340, -40],
+      "credentials": {
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/profiles?stripe_customer_id=eq.{{ $json.customer }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [ { "name": "Prefer", "value": "return=minimal" } ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"subscription_status\": \"active\" } }}",
+        "options": {}
+      },
+      "id": "renew_subscription",
+      "name": "Renew Subscription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-340, 160],
+      "credentials": {
+        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
+      }
+    }
+  ],
+  "connections": {
+    "Stripe Trigger": { "main": [ [ { "node": "Route Event", "type": "main", "index": 0 } ] ] },
+    "Route Event": {
+      "main": [
+        [
+          { "node": "Credit pack?", "type": "main", "index": 0 },
+          { "node": "New subscription?", "type": "main", "index": 0 },
+          { "node": "Cancellation?", "type": "main", "index": 0 },
+          { "node": "Renewal?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Credit pack?": { "main": [ [ { "node": "Add Credits", "type": "main", "index": 0 } ], [] ] },
+    "New subscription?": { "main": [ [ { "node": "Activate Subscription", "type": "main", "index": 0 } ], [] ] },
+    "Cancellation?": { "main": [ [ { "node": "Cancel Subscription", "type": "main", "index": 0 } ], [] ] },
+    "Renewal?": { "main": [ [ { "node": "Renew Subscription", "type": "main", "index": 0 } ], [] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
