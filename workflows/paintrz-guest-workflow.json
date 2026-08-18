@@ -1,0 +1,525 @@
+{
+  "name": "Paintrz — Guest Links",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Guest links (QR handover)\n\nThree endpoints for the homeowner's own phone. A guest has **no Supabase session**, and both `storage.objects` and `renders` are behind RLS keyed on `auth.uid()` — so a guest can write to neither. Every write here happens on the service role.\n\n- `paintrz-guest-info` — is this token alive, and whose brand is it?\n- `paintrz-guest-render` — accept a photo, start a render\n- `paintrz-guest-status` — poll one render, scoped to the token\n\n### This does NOT re-implement the render pipeline\nIt prepares the row and calls **Paintrz — Render Pipeline** over HTTP. One pipeline, one place to fix.\n\n### Before this works\n1. Run `sql/guest-links.sql` in Supabase.\n2. Create the **Paintrz Supabase service role** custom-auth credential and attach it to every HTTP node here.\n3. Publish, then confirm the three Production URLs match `CONFIG.N8N_GUEST_*` in app.html.",
+        "height": 460,
+        "width": 420
+      },
+      "id": "note_overview",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-2600, -720]
+    },
+    {
+      "parameters": {
+        "content": "## CORS\nThese are POSTs with `Content-Type: application/json`, so the browser sends a **preflight OPTIONS** first — unlike the colours proxy, which is a simple GET and needs only a response header.\n\n`allowedOrigins` on each Webhook node is what answers that preflight. The `Access-Control-Allow-Origin` header on each Respond node covers the actual response.\n\nIf preflight still fails, the n8n build is too old for `allowedOrigins`; the fallback is to post as `text/plain` and parse the body server-side.",
+        "height": 300,
+        "width": 380
+      },
+      "id": "note_cors",
+      "name": "CORS note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-2600, -230]
+    },
+
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "paintrz-guest-info",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "guest_info_webhook",
+      "name": "Guest Info Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-2100, -640]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/rpc/guest_link_status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"p_token\": $json.body.token } }}",
+        "options": {}
+      },
+      "id": "info_link_status",
+      "name": "Info Link Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1880, -640],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// A PostgREST rpc returning TABLE gives back an array. Depending on the n8n\n// build that arrives either as one item holding an array or as split items, so\n// normalise both shapes rather than betting on one.\nconst r = $input.first().json;\nconst row = Array.isArray(r) ? (r[0] || {}) : r;\nreturn [{ json: row }];"
+      },
+      "id": "info_normalize",
+      "name": "Info Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1660, -640]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "info_valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "info_valid",
+      "name": "Info Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-1440, -640]
+    },
+    {
+      "parameters": {
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/profiles?id=eq.{{ $json.owner_user_id }}&select=company_name,brand_logo_url,brand_contact",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "id": "info_owner_profile",
+      "name": "Info Owner Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1220, -700],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Only what the guest page needs to brand itself and show the allowance.\n// Deliberately no owner id, no email, no plan, no credit balance — this reply\n// goes to a stranger's phone.\nconst link = $('Info Normalize').first().json;\nconst p = $input.first().json;\nconst profile = Array.isArray(p) ? (p[0] || {}) : p;\nreturn [{ json: {\n  valid: true,\n  renders_left: link.renders_left,\n  expires_at: link.expires_at,\n  company_name: profile.company_name || null,\n  brand_logo_url: profile.brand_logo_url || null,\n  brand_contact: profile.brand_contact || null\n} }];"
+      },
+      "id": "info_build_reply",
+      "name": "Info Build Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1000, -700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+        }
+      },
+      "id": "info_respond_ok",
+      "name": "Info Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-780, -700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"valid\": false, \"reason\": $json.reason || \"not_found\" } }}",
+        "options": {
+          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+        }
+      },
+      "id": "info_respond_invalid",
+      "name": "Info Respond Invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-1220, -560]
+    },
+
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "paintrz-guest-render",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "guest_render_webhook",
+      "name": "Guest Render Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-2100, -180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/rpc/guest_link_status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"p_token\": $json.body.token } }}",
+        "options": {}
+      },
+      "id": "render_link_status",
+      "name": "Render Link Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1880, -180],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst row = Array.isArray(r) ? (r[0] || {}) : r;\nreturn [{ json: row }];"
+      },
+      "id": "render_normalize",
+      "name": "Render Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1660, -180]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "render_valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "render_valid",
+      "name": "Render Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-1440, -180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": false, \"reason\": $json.reason || \"not_found\" } }}",
+        "options": {
+          "responseCode": 403,
+          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+        }
+      },
+      "id": "render_respond_denied",
+      "name": "Render Respond Denied",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-1220, -60]
+    },
+    {
+      "parameters": {
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/profiles?id=eq.{{ $json.owner_user_id }}&select=brand_logo_url,brand_contact",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "id": "render_owner_profile",
+      "name": "Render Owner Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1220, -260],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The guest posts the image itself, because it cannot write to storage. The\n// page downscales to 1600px/JPEG first, so this is a few hundred KB rather\n// than a raw phone photo.\nconst body = $('Guest Render Webhook').first().json.body || {};\nconst link = $('Render Normalize').first().json;\nconst p = $input.first().json;\nconst profile = Array.isArray(p) ? (p[0] || {}) : p;\n\nconst b64 = String(body.photo_base64 || '');\nif (!b64) throw new Error('no photo supplied');\n\n// Namespaced by link, so everything one visit produced stays identifiable\n// after the link is revoked.\nconst stamp = Date.now();\nconst path = 'guest/' + link.link_id + '/' + stamp + '.jpg';\n\nreturn [{\n  json: {\n    link_id: link.link_id,\n    owner_user_id: link.owner_user_id,\n    path: path,\n    public_url: 'https://pwkrwyemkjlmjdacelyi.supabase.co/storage/v1/object/public/photos/' + path,\n    brand_logo_url: profile.brand_logo_url || null,\n    brand_contact: profile.brand_contact || null\n  },\n  binary: {\n    data: { data: b64, mimeType: 'image/jpeg', fileName: stamp + '.jpg' }\n  }\n}];"
+      },
+      "id": "render_prepare_photo",
+      "name": "Render Prepare Photo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1000, -260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/storage/v1/object/photos/{{ $json.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "image/jpeg" },
+            { "name": "x-upsert", "value": "true" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "render_upload_photo",
+      "name": "Render Upload Photo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-780, -260],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [ { "name": "Prefer", "value": "return=representation" } ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"user_id\": $('Render Prepare Photo').item.json.owner_user_id, \"guest_link_id\": $('Render Prepare Photo').item.json.link_id, \"original_photo_url\": $('Render Prepare Photo').item.json.public_url, \"color_hex\": $('Guest Render Webhook').item.json.body.color_hex, \"color_name\": $('Guest Render Webhook').item.json.body.color_name, \"prompt\": $('Guest Render Webhook').item.json.body.prompt, \"status\": \"processing\" } }}",
+        "options": {}
+      },
+      "id": "render_insert_row",
+      "name": "Render Insert Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-560, -260],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst row = Array.isArray(r) ? (r[0] || {}) : r;\nif (!row || !row.id) throw new Error('render row was not created');\nreturn [{ json: { render_id: row.id } }];"
+      },
+      "id": "render_row_ready",
+      "name": "Render Row Ready",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-340, -260]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"render_id\": $json.render_id } }}",
+        "options": {
+          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+        }
+      },
+      "id": "render_respond_accepted",
+      "name": "Render Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-120, -260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-production-e390.up.railway.app/webhook/paintrz-render",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"render_id\": $('Render Row Ready').item.json.render_id, \"user_id\": $('Render Prepare Photo').item.json.owner_user_id, \"photo_url\": $('Render Prepare Photo').item.json.public_url, \"color_hex\": $('Guest Render Webhook').item.json.body.color_hex, \"color_name\": $('Guest Render Webhook').item.json.body.color_name, \"colors\": $('Guest Render Webhook').item.json.body.colors, \"surface\": $('Guest Render Webhook').item.json.body.surface, \"prompt\": $('Guest Render Webhook').item.json.body.prompt, \"brand_logo_url\": $('Render Prepare Photo').item.json.brand_logo_url, \"brand_contact\": $('Render Prepare Photo').item.json.brand_contact } }}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "render_call_pipeline",
+      "name": "Render Call Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [100, -260],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "pipeline_ok",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "render_succeeded",
+      "name": "Render Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [320, -260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/rpc/consume_guest_render",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"p_link_id\": $('Render Prepare Photo').item.json.link_id } }}",
+        "options": {}
+      },
+      "id": "render_consume",
+      "name": "Render Consume",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [540, -300],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "content": "### Why the count is spent AFTER the render\nThe cap is charged only once the pipeline reports success, so a failed render does not eat the homeowner's allowance. The trade-off is a small race: several guests submitting at the same instant can each pass validation. `consume_guest_render` increments inside its own guard, so the stored count still cannot exceed the cap — at worst a render or two slips through.\n\nCharging up front would close that, at the cost of burning the cap on every failure. Given the pipeline has never yet completed a render, that is the worse trade today. Revisit once it is proven.",
+        "height": 280,
+        "width": 400
+      },
+      "id": "note_consume",
+      "name": "Consume note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [520, -60]
+    },
+
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "paintrz-guest-status",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "guest_status_webhook",
+      "name": "Guest Status Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-2100, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/guest_links?token=eq.{{ $json.body.token }}&select=id,render_cap,renders_used",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "id": "status_get_link",
+      "name": "Status Get Link",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1880, 300],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Looked up by token rather than through guest_link_status, so a render that\n// finishes just after the two hours are up can still be collected. Expiry\n// stops new renders; it should not strand one already paid for.\nconst r = $input.first().json;\nconst row = Array.isArray(r) ? (r[0] || null) : r;\nif (!row || !row.id) throw new Error('unknown link');\nreturn [{ json: {\n  link_id: row.id,\n  renders_left: Math.max(0, (row.render_cap || 0) - (row.renders_used || 0))\n} }];"
+      },
+      "id": "status_normalize_link",
+      "name": "Status Normalize Link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1660, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?id=eq.{{ $('Guest Status Webhook').item.json.body.render_id }}&guest_link_id=eq.{{ $json.link_id }}&select=status,rendered_photo_url,branded_photo_url",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "id": "status_get_render",
+      "name": "Status Get Render",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1440, 300],
+      "credentials": {
+        "httpCustomAuth": { "id": "paintrz-supabase-service-role", "name": "Paintrz Supabase service role" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtering on guest_link_id as well as id is the ownership check: a token can\n// only ever read back renders it produced. Without it, any live token could\n// poll any render id on the platform.\nconst r = $input.first().json;\nconst row = Array.isArray(r) ? (r[0] || null) : r;\nconst link = $('Status Normalize Link').first().json;\nif (!row || !row.status) return [{ json: { status: 'not_found' } }];\nreturn [{ json: {\n  status: row.status,\n  rendered_photo_url: row.rendered_photo_url || null,\n  branded_photo_url: row.branded_photo_url || null,\n  renders_left: link.renders_left\n} }];"
+      },
+      "id": "status_build_reply",
+      "name": "Status Build Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1220, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+        }
+      },
+      "id": "status_respond",
+      "name": "Status Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-1000, 300]
+    }
+  ],
+  "connections": {
+    "Guest Info Webhook": { "main": [ [ { "node": "Info Link Status", "type": "main", "index": 0 } ] ] },
+    "Info Link Status": { "main": [ [ { "node": "Info Normalize", "type": "main", "index": 0 } ] ] },
+    "Info Normalize": { "main": [ [ { "node": "Info Valid?", "type": "main", "index": 0 } ] ] },
+    "Info Valid?": {
+      "main": [
+        [ { "node": "Info Owner Profile", "type": "main", "index": 0 } ],
+        [ { "node": "Info Respond Invalid", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Info Owner Profile": { "main": [ [ { "node": "Info Build Reply", "type": "main", "index": 0 } ] ] },
+    "Info Build Reply": { "main": [ [ { "node": "Info Respond OK", "type": "main", "index": 0 } ] ] },
+
+    "Guest Render Webhook": { "main": [ [ { "node": "Render Link Status", "type": "main", "index": 0 } ] ] },
+    "Render Link Status": { "main": [ [ { "node": "Render Normalize", "type": "main", "index": 0 } ] ] },
+    "Render Normalize": { "main": [ [ { "node": "Render Valid?", "type": "main", "index": 0 } ] ] },
+    "Render Valid?": {
+      "main": [
+        [ { "node": "Render Owner Profile", "type": "main", "index": 0 } ],
+        [ { "node": "Render Respond Denied", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Render Owner Profile": { "main": [ [ { "node": "Render Prepare Photo", "type": "main", "index": 0 } ] ] },
+    "Render Prepare Photo": { "main": [ [ { "node": "Render Upload Photo", "type": "main", "index": 0 } ] ] },
+    "Render Upload Photo": { "main": [ [ { "node": "Render Insert Row", "type": "main", "index": 0 } ] ] },
+    "Render Insert Row": { "main": [ [ { "node": "Render Row Ready", "type": "main", "index": 0 } ] ] },
+    "Render Row Ready": { "main": [ [ { "node": "Render Respond Accepted", "type": "main", "index": 0 } ] ] },
+    "Render Respond Accepted": { "main": [ [ { "node": "Render Call Pipeline", "type": "main", "index": 0 } ] ] },
+    "Render Call Pipeline": { "main": [ [ { "node": "Render Succeeded?", "type": "main", "index": 0 } ] ] },
+    "Render Succeeded?": {
+      "main": [
+        [ { "node": "Render Consume", "type": "main", "index": 0 } ],
+        []
+      ]
+    },
+
+    "Guest Status Webhook": { "main": [ [ { "node": "Status Get Link", "type": "main", "index": 0 } ] ] },
+    "Status Get Link": { "main": [ [ { "node": "Status Normalize Link", "type": "main", "index": 0 } ] ] },
+    "Status Normalize Link": { "main": [ [ { "node": "Status Get Render", "type": "main", "index": 0 } ] ] },
+    "Status Get Render": { "main": [ [ { "node": "Status Build Reply", "type": "main", "index": 0 } ] ] },
+    "Status Build Reply": { "main": [ [ { "node": "Status Respond", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -195,6 +195,31 @@ control, and without this there would be no exit at all on a laptop. */
 #pinError{font-size:12px; color:#B3413A; min-height:15px;}
 #pinForgot{background:none; border:none; font-size:12px; color:var(--muted-2); text-decoration:underline; cursor:pointer;}
 
+/* guest links (owner side, Settings) */
+.guest-link{border:1px solid var(--line); border-radius:12px; padding:14px; margin-top:12px; background:rgba(255,255,255,0.9); display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start;}
+.guest-link .qr{width:136px; flex:none; background:#fff; border-radius:8px; padding:6px;}
+.guest-link .qr svg{width:100%; height:auto; display:block;}
+.guest-link .meta{flex:1; min-width:190px; display:flex; flex-direction:column; gap:7px;}
+.guest-link .url{font-family:'JetBrains Mono'; font-size:10.5px; word-break:break-all; color:var(--muted-2);}
+.guest-link .row{display:flex; gap:8px; flex-wrap:wrap;}
+.guest-link .row .btn{padding:8px 12px; font-size:12.5px;}
+.guest-expiry{font-family:'JetBrains Mono'; font-size:12px; color:var(--teal);}
+.guest-expiry.spent{color:#B3413A;}
+
+/* ---- guest mode -----------------------------------------------------
+The homeowner's own phone. No account, no history, no settings, no billing
+and no way into the contractor's portal — the page only ever talks to n8n. */
+#app.guest-mode #headerActions, #app.guest-mode #menuBtn{display:none !important;}
+#app.guest-mode nav.tabs{display:none;}
+#app.guest-mode .correction-box, #app.guest-mode #correctionsLeft{display:none !important;}
+#app.guest-mode header .wrap{justify-content:flex-start; gap:16px;}
+#app.guest-mode #brandMark{flex:1; text-align:center; font-size:22px;}
+#app.guest-mode #brandMark img{height:40px; margin:0 auto;}
+#app.guest-mode header{padding:20px 0;}
+#guestMeta{display:none; text-align:center; font-family:'JetBrains Mono'; font-size:12px; color:var(--muted-2); margin:10px 0 2px;}
+#app.guest-mode #guestMeta{display:block;}
+#guestGateScreen .card{max-width:420px; margin:60px auto; text-align:center;}
+
 /* settings: logo picker */
 .logo-row{display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:10px;}
 .logo-preview{width:180px; height:92px; border:1px dashed var(--line); border-radius:10px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.55); overflow:hidden; flex:none;}
@@ -232,6 +257,15 @@ SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 N8N_RENDER_WEBHOOK: "https://n8n-production-e390.up.railway.app/webhook/paintrz-render",
 PAINTDB_API: "https://paintdb.com/api/v1", // free, no key required — see https://paintdb.com/api/v1
 PAINTDB_PROXY: "https://n8n-production-e390.up.railway.app/webhook/paintrz-colors",
+// Guest (QR handover) endpoints. A guest has no Supabase session, and storage
+// and renders are both behind RLS keyed on auth.uid(), so every guest write
+// goes through n8n on the service role instead.
+N8N_GUEST_INFO: "https://n8n-production-e390.up.railway.app/webhook/paintrz-guest-info",
+N8N_GUEST_RENDER: "https://n8n-production-e390.up.railway.app/webhook/paintrz-guest-render",
+N8N_GUEST_STATUS: "https://n8n-production-e390.up.railway.app/webhook/paintrz-guest-status",
+GUEST_WINDOW_MIN: 120,
+GUEST_RENDER_CAP: 100,
+GUEST_MAX_EDGE: 1600,
 RENDER_COST_CENTS: 85,
 FREE_CORRECTIONS: 2,
 PHOTOS_BUCKET: "photos"
@@ -264,6 +298,17 @@ link just signed people in and never asked for a new password. -->
 </div>
 
 <!-- ============================================================ APP ============================================================ -->
+<!-- Shown instead of the app when a ?guest= link is dead: expired, revoked,
+spent or simply wrong. A stranger holding a stale QR sees this and nothing else. -->
+<div id="guestGateScreen" class="hidden">
+<div class="wrap">
+<div class="card">
+<h3 id="guestGateTitle">Checking your link…</h3>
+<p class="status-line" id="guestGateMsg">One moment.</p>
+</div>
+</div>
+</div>
+
 <div id="app" class="hidden">
 <div id="appBg"></div>
 <header>
@@ -307,6 +352,7 @@ nothing but the PIN-gated way out — credits and log out are hidden. -->
 </div>
 
 <div class="wrap">
+<div id="guestMeta"></div>
 <nav class="tabs">
 <button data-tab="render" class="active">New render</button>
 <button data-tab="history">History</button>
@@ -462,6 +508,16 @@ model guesses, and a wrong guess costs the user a real credit. -->
 </div>
 <div class="status-line" style="margin-top:10px;">This is what stops a client handing the phone back into your account. It's kept on this device, so set one on each phone or tablet you hand over. Clear it and you'll be asked for a new one next time you start client mode.</div>
 </div>
+<div class="card">
+<h3 style="margin-bottom:8px;">Guest links</h3>
+<p class="status-line" id="guestGate">—</p>
+<div id="guestControls" class="hidden">
+<p class="status-line">Show a homeowner the QR code and they can run renders on their own phone for two hours, billed to you. Each link is capped at 100 renders and can be revoked at any time.</p>
+<button type="button" class="btn btn-primary" id="guestCreateBtn" style="margin-top:12px;">Create a guest link</button>
+<div class="status-line" id="guestStatus"></div>
+<div id="guestList"></div>
+</div>
+</div>
 </section>
 </div>
 </div>
@@ -596,6 +652,11 @@ if (e.key === 'Enter') document.getElementById('setPasswordBtn').click();
 });
 
 async function initAuth(){
+// A ?guest= link is a different product: no account, no session, every write
+// brokered by n8n. It has to be handled before any auth work, or the recovery
+// and session checks below run for someone who has neither.
+const guestParam = new URLSearchParams(location.search).get('guest');
+if (guestParam){ return startGuestSession(guestParam); }
 // A recovery link lands here with type=recovery in the URL fragment. Check it
 // before the session lookup, or the recovery session just logs them straight
 // in and the password is never actually changed.
@@ -1123,6 +1184,20 @@ const composedPrompt = selectedColors.length
 : `Paint the ${surface}.`;
 const primaryColor = selectedColors[0] || null;
 
+// A guest has no credits, no profile and no storage access of its own, so it
+// takes an entirely separate path from here.
+if (guestToken){
+return submitGuestRender({
+color_hex: primaryColor ? primaryColor.hex : null,
+color_name: selectedColors.length
+? selectedColors.map(x => x.brand + ' ' + x.name + (x.code ? ' (' + x.code + ')' : '')).join(' + ')
+: null,
+colors: selectedColors.map(x => ({ hex: x.hex, name: x.name, code: x.code, brand: x.brand })),
+surface: surface,
+prompt: composedPrompt
+});
+}
+
 const subscribed = currentProfile.subscription_status === 'active';
 if (!subscribed && (currentProfile.credits_balance || 0) < 1){
 statusEl.textContent = "You're out of credits — buy a pack under Settings.";
@@ -1362,6 +1437,134 @@ refreshPinStatus();
 document.getElementById('settingsStatus').textContent = 'PIN cleared. You\'ll set a new one next time you start client mode.';
 });
 
+// ---------- GUEST LINKS (QR handover, owner side) ----------
+// The owner creates and revokes their own rows directly, because RLS covers
+// them: they are authenticated. Everything the GUEST does goes through n8n
+// instead, since a guest has no session for RLS to key on.
+let guestTicker = null;
+
+function guestLinkUrl(token){
+return location.origin + location.pathname + '?guest=' + token;
+}
+
+function newGuestToken(){
+// ~190 bits from crypto. This token is the only thing standing between a
+// stranger and the owner's render budget, so nothing about it is derived.
+const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const bytes = new Uint8Array(32);
+crypto.getRandomValues(bytes);
+return Array.from(bytes, b => alphabet[b % 62]).join('');
+}
+
+function ownerIsStudio(){
+if (!currentProfile) return false;
+const p = (currentProfile.subscription_plan || '').toLowerCase();
+return currentProfile.subscription_status === 'active' && p.includes('studio');
+}
+
+function timeLeft(iso){
+const ms = new Date(iso) - new Date();
+if (!(ms > 0)) return null;
+const m = Math.floor(ms / 60000), sec = Math.floor((ms % 60000) / 1000);
+return m + ':' + String(sec).padStart(2, '0');
+}
+
+function guestLinkCard(l){
+const url = guestLinkUrl(l.token);
+const left = Math.max(0, l.render_cap - l.renders_used);
+const el = document.createElement('div');
+el.className = 'guest-link';
+// The encoder stops at version 6 (~106 bytes). A production link is about 70,
+// but a long dev URL can overflow it, and an uncaught throw here would take
+// the whole Settings tab down.
+let qr;
+try { qr = qrSvg(url, 240); }
+catch (e){ qr = '<div class="status-line">Too long to encode as a QR code here — use Copy link.</div>'; }
+el.innerHTML = '<div class="qr">' + qr + '</div>' +
+'<div class="meta">' +
+'<div><strong>' + left + ' of ' + l.render_cap + ' renders left</strong></div>' +
+'<div class="guest-expiry" data-expires="' + l.expires_at + '">—</div>' +
+'<div class="url"></div>' +
+'<div class="row">' +
+'<button type="button" class="btn btn-ghost" data-copy="1">Copy link</button>' +
+'<button type="button" class="btn btn-ghost" data-revoke="1">Revoke</button>' +
+'</div></div>';
+el.querySelector('.url').textContent = url;
+el.querySelector('[data-copy]').addEventListener('click', async (e) => {
+const btn = e.currentTarget;
+try { await navigator.clipboard.writeText(url); btn.textContent = 'Copied'; }
+catch (err){ btn.textContent = 'Copy failed'; }
+setTimeout(() => { btn.textContent = 'Copy link'; }, 1800);
+});
+el.querySelector('[data-revoke]').addEventListener('click', () => revokeGuestLink(l.id));
+return el;
+}
+
+function startGuestTicker(){
+if (guestTicker) clearInterval(guestTicker);
+const tick = () => {
+const els = document.querySelectorAll('.guest-expiry');
+if (!els.length){ clearInterval(guestTicker); guestTicker = null; return; }
+els.forEach(e => {
+const left = timeLeft(e.dataset.expires);
+if (left === null){ e.textContent = 'Expired'; e.classList.add('spent'); }
+else e.textContent = 'Expires in ' + left;
+});
+};
+tick();
+guestTicker = setInterval(tick, 1000);
+}
+
+async function loadGuestLinks(){
+const gate = document.getElementById('guestGate');
+const controls = document.getElementById('guestControls');
+if (!ownerIsStudio()){
+gate.textContent = 'Guest links come with the Studio plan. Subscribe above and the controls appear here.';
+controls.classList.add('hidden');
+return;
+}
+gate.textContent = 'Two-hour links, ' + CONFIG.GUEST_RENDER_CAP + ' renders each. Guest renders come out of your own monthly allowance.';
+controls.classList.remove('hidden');
+const list = document.getElementById('guestList');
+const { data, error } = await supa.from('guest_links').select('*')
+.eq('owner_user_id', currentUser.id)
+.eq('revoked', false)
+.gt('expires_at', new Date().toISOString())
+.order('created_at', { ascending: false });
+list.innerHTML = '';
+if (error){
+// The table only exists once sql/guest-links.sql has been run.
+document.getElementById('guestStatus').textContent = 'Could not load guest links: ' + error.message;
+return;
+}
+if (!data || !data.length){ list.innerHTML = '<div class="status-line">No active links right now.</div>'; return; }
+data.forEach(l => list.appendChild(guestLinkCard(l)));
+startGuestTicker();
+}
+
+document.getElementById('guestCreateBtn').addEventListener('click', async () => {
+const st = document.getElementById('guestStatus');
+if (!ownerIsStudio()) return;
+st.textContent = 'Creating...';
+const { error } = await supa.from('guest_links').insert({
+token: newGuestToken(),
+owner_user_id: currentUser.id,
+expires_at: new Date(Date.now() + CONFIG.GUEST_WINDOW_MIN * 60000).toISOString(),
+render_cap: CONFIG.GUEST_RENDER_CAP
+});
+if (error){ st.textContent = 'Could not create link: ' + error.message; return; }
+st.textContent = '';
+loadGuestLinks();
+});
+
+async function revokeGuestLink(id){
+const st = document.getElementById('guestStatus');
+const { error } = await supa.from('guest_links').update({ revoked: true }).eq('id', id);
+if (error){ st.textContent = 'Could not revoke: ' + error.message; return; }
+st.textContent = 'Link revoked. The QR code stops working immediately.';
+loadGuestLinks();
+}
+
 // ---------- SIDE MENU ----------
 function openSideMenu(on){
 document.getElementById('sideMenu').classList.toggle('hidden', !on);
@@ -1422,6 +1625,172 @@ el.innerHTML = `<img src="${img}"><div class="meta">${new Date(r.created_at).toL
 el.addEventListener('click', () => window.open(img, '_blank'));
 grid.appendChild(el);
 });
+}
+
+// ---------- GUEST MODE (the homeowner's own phone) ----------
+// No account and no Supabase session. Storage and renders both sit behind RLS
+// keyed on auth.uid(), so a guest can write to neither; every write is brokered
+// by n8n on the service role. That also means a guest cannot poll the renders
+// table, which is why there is a status endpoint of its own.
+let guestToken = null;
+let guestInfo = null;
+let guestExpiryTicker = null;
+
+const GUEST_REASONS = {
+not_found: 'This link is not valid. Ask for a fresh QR code.',
+expired: 'This link has expired. Ask for a fresh QR code.',
+revoked: 'This link was switched off. Ask for a fresh QR code.',
+cap_reached: 'This link has used all of its renders. Ask for a fresh QR code.'
+};
+
+function showGuestGate(title, msg){
+document.getElementById('loginScreen').classList.add('hidden');
+document.getElementById('app').classList.add('hidden');
+document.getElementById('guestGateScreen').classList.remove('hidden');
+document.getElementById('guestGateTitle').textContent = title;
+document.getElementById('guestGateMsg').textContent = msg;
+}
+
+async function startGuestSession(token){
+guestToken = token;
+showGuestGate('Checking your link...', 'One moment.');
+let info;
+try {
+const resp = await fetch(CONFIG.N8N_GUEST_INFO, {
+method: 'POST', headers: {'Content-Type':'application/json'},
+body: JSON.stringify({ token: token })
+});
+if (!resp.ok) throw new Error('the check returned ' + resp.status);
+info = await resp.json();
+} catch (e){
+showGuestGate('Cannot check this link', 'Something went wrong (' + e.message + '). Try again in a moment.');
+return;
+}
+if (!info || !info.valid){
+showGuestGate('Link unavailable', GUEST_REASONS[info && info.reason] || 'This link cannot be used.');
+return;
+}
+guestInfo = info;
+document.getElementById('guestGateScreen').classList.add('hidden');
+const app = document.getElementById('app');
+app.classList.add('guest-mode');
+app.classList.remove('hidden');
+applyGuestBranding(info);
+updateGuestMeta();
+guestExpiryTicker = setInterval(updateGuestMeta, 1000);
+}
+
+// The guest sees the contractor's brand, never ours - same rule as client mode.
+function applyGuestBranding(info){
+const mark = document.getElementById('brandMark');
+if (info.brand_logo_url){
+mark.innerHTML = '';
+const img = document.createElement('img');
+img.src = info.brand_logo_url;
+img.alt = info.company_name || 'Logo';
+mark.appendChild(img);
+mark.classList.remove('logo-placeholder');
+} else if (info.company_name){
+mark.textContent = info.company_name;
+}
+document.getElementById('brandContact').textContent = info.brand_contact || '';
+}
+
+function updateGuestMeta(){
+if (!guestInfo) return;
+const left = timeLeft(guestInfo.expires_at);
+if (left === null){
+if (guestExpiryTicker){ clearInterval(guestExpiryTicker); guestExpiryTicker = null; }
+showGuestGate('Session ended', 'The window on this link has closed. Ask for a fresh QR code.');
+return;
+}
+const r = guestInfo.renders_left;
+document.getElementById('guestMeta').textContent =
+r + ' render' + (r === 1 ? '' : 's') + ' left  -  ' + left + ' remaining';
+}
+
+// Guests post the image itself rather than a storage URL, so it has to be a
+// sane size before it crosses a phone connection. A current phone photo runs to
+// several megabytes, and base64 adds a third on top of that.
+async function shrinkForUpload(file){
+const bmp = await createImageBitmap(file);
+const scale = Math.min(1, CONFIG.GUEST_MAX_EDGE / Math.max(bmp.width, bmp.height));
+const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+const canvas = document.createElement('canvas');
+canvas.width = w; canvas.height = h;
+canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85));
+if (!blob) throw new Error('this browser could not process the image');
+const b64 = await new Promise((res, rej) => {
+const fr = new FileReader();
+fr.onload = () => res(String(fr.result).split(',')[1]);
+fr.onerror = () => rej(new Error('could not read the file'));
+fr.readAsDataURL(blob);
+});
+return { base64: b64, bytes: blob.size };
+}
+
+async function submitGuestRender(payload){
+const statusEl = document.getElementById('renderStatus');
+statusEl.textContent = 'Preparing photo...';
+let shrunk;
+try { shrunk = await shrinkForUpload(selectedFile); }
+catch (e){ statusEl.textContent = 'Could not use that photo: ' + e.message; return; }
+
+statusEl.textContent = 'Uploading...';
+let out = {};
+try {
+const body = Object.assign({ token: guestToken, photo_base64: shrunk.base64 }, payload);
+const resp = await fetch(CONFIG.N8N_GUEST_RENDER, {
+method: 'POST', headers: {'Content-Type':'application/json'},
+body: JSON.stringify(body)
+});
+try { out = await resp.json(); } catch (e){ out = {}; }
+if (!resp.ok || !out.render_id){
+throw new Error(GUEST_REASONS[out.reason] || out.message || ('the server returned ' + resp.status));
+}
+} catch (e){
+statusEl.textContent = 'Render request failed: ' + e.message;
+return;
+}
+statusEl.textContent = 'Rendering - this takes about 10 seconds...';
+pollGuestResult(out.render_id);
+}
+
+function pollGuestResult(renderId){
+const statusEl = document.getElementById('renderStatus');
+if (pollTimer) clearInterval(pollTimer);
+let tries = 0;
+const interval = setInterval(async () => {
+if (++tries > POLL_LIMIT){
+clearInterval(interval); pollTimer = null;
+statusEl.textContent = 'This is taking longer than expected. Show this screen to your contractor.';
+return;
+}
+let d = null;
+try {
+const resp = await fetch(CONFIG.N8N_GUEST_STATUS, {
+method: 'POST', headers: {'Content-Type':'application/json'},
+body: JSON.stringify({ token: guestToken, render_id: renderId })
+});
+d = await resp.json();
+} catch (e){ return; } // a dropped poll is not a failed render - try again
+if (!d) return;
+if (d.status === 'done'){
+clearInterval(interval); pollTimer = null;
+statusEl.textContent = '';
+document.getElementById('renderResult').classList.remove('hidden');
+document.getElementById('renderImg').src = d.branded_photo_url || d.rendered_photo_url;
+if (typeof d.renders_left === 'number' && guestInfo){
+guestInfo.renders_left = d.renders_left;
+updateGuestMeta();
+}
+} else if (d.status === 'failed'){
+clearInterval(interval); pollTimer = null;
+statusEl.textContent = 'That one did not come out. Try another photo.';
+}
+}, POLL_MS);
+pollTimer = interval;
 }
 
 // ---------- QR CODE (byte mode, EC level M, versions 1–6) ----------
@@ -1651,6 +2020,7 @@ document.getElementById('setContact').value = currentProfile.brand_contact || ''
 setLogoPreview(currentProfile.brand_logo_url || null);
 document.getElementById('settingsStatus').textContent = '';
 refreshPinStatus();
+loadGuestLinks();
 pendingLogoFile = null;
 pendingLogoRemoval = false;
 }
