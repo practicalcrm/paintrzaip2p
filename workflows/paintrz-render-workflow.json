@@ -237,7 +237,7 @@
       "position": [140, -80],
       "onError": "continueErrorOutput",
       "credentials": {
-        "httpHeaderAuth": { "id": "paintrz-dezgo-key", "name": "Paintrz Dezgo API key" }
+        "httpHeaderAuth": { "id": "Oj08owu4zivP6hbD", "name": "Paintrz Dezgo API key" }
       }
     },
     {
