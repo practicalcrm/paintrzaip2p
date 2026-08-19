@@ -34,7 +34,7 @@ input, textarea{background:var(--panel-3); border:1px solid var(--line); color:#
 
 /* ---- app shell ---- */
 header{border-bottom:1px solid var(--line); padding:16px 0;}
-header .wrap{display:flex; justify-content:space-between; align-items:center;}
+header .wrap{display:flex; justify-content:center; align-items:center; position:relative;}
 .brand{font-weight:700; font-size:18px;}
 .brand .z{color:var(--teal);}
 .credits-pill{font-family:'JetBrains Mono'; font-size:12px; background:var(--panel); border:1px solid var(--line); padding:6px 12px; border-radius:999px; color:var(--teal);}
@@ -131,11 +131,12 @@ outline is what separates a card from the background rather than contrast. */
 #app .family-tile, #app .history-item{background:rgba(255,255,255,0.92);}
 #app .upload-drop{color:var(--muted);}
 #brandMark img{height:34px; width:auto; display:block;}
-.brand-block{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.brand-block{display:flex; flex-direction:column; gap:2px; min-width:0; align-items:center; text-align:center;}
 .brand-contact{font-size:12px; color:var(--muted-2); font-family:'JetBrains Mono'; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .brand-contact:empty{display:none;}
-.header-actions{display:flex; align-items:center; gap:12px;}
-.icon-btn{display:none; background:transparent; border:1px solid var(--line); color:inherit; border-radius:10px; width:42px; height:42px; font-size:17px; cursor:pointer; line-height:1; flex:none;}
+.header-actions{display:none;}
+.icon-btn{display:inline-flex; align-items:center; justify-content:center; position:absolute; right:24px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:var(--muted-2); opacity:0.6; width:38px; height:38px; font-size:19px; cursor:pointer; line-height:1; flex:none; padding:0;}
+.icon-btn:hover{opacity:1;}
 
 /* The main CTA — full width and centred, not a small left-hugging button. */
 #submitRenderBtn{display:block; width:100%; max-width:460px; margin:0 auto; padding:16px 24px; font-size:16px;}
@@ -172,14 +173,14 @@ on screen for a client to tap that reaches the account. The menu button is
 forced visible at every width here; outside client mode it is a phone-only
 control, and without this there would be no exit at all on a laptop. */
 #app.client-mode #menuBtn{display:inline-flex !important; align-items:center; justify-content:center;}
-#app.client-mode #sideCredits, #app.client-mode #sideLogoutBtn{display:none !important;}
+#app.client-mode #sideCredits, #app.client-mode #sideLogoutBtn, #app.client-mode #clientModeBtn{display:none !important;}
 #exitClientBtn{display:none;}
 #app.client-mode #exitClientBtn{display:block; width:100%;}
 #app.client-mode #headerActions{display:none !important;}
 #app.client-mode nav.tabs button[data-tab="settings"]{display:none;}
 /* Nothing about cost, credits or allowances in front of a homeowner. */
 #app.client-mode #correctionsLeft{display:none !important;}
-#app.client-mode header .wrap{justify-content:flex-start; gap:16px;}
+#app.client-mode header .wrap{justify-content:center; gap:16px;}
 #app.client-mode #brandMark{flex:1; text-align:center; font-size:22px;}
 #app.client-mode #brandMark img{height:40px; margin:0 auto;}
 #app.client-mode header{padding:20px 0;}
@@ -212,7 +213,7 @@ and no way into the contractor's portal — the page only ever talks to n8n. */
 #app.guest-mode #headerActions, #app.guest-mode #menuBtn{display:none !important;}
 #app.guest-mode nav.tabs{display:none;}
 #app.guest-mode .correction-box, #app.guest-mode #correctionsLeft{display:none !important;}
-#app.guest-mode header .wrap{justify-content:flex-start; gap:16px;}
+#app.guest-mode header .wrap{justify-content:center; gap:16px;}
 #app.guest-mode #brandMark{flex:1; text-align:center; font-size:22px;}
 #app.guest-mode #brandMark img{height:40px; margin:0 auto;}
 #app.guest-mode header{padding:20px 0;}
@@ -313,16 +314,15 @@ spent or simply wrong. A stranger holding a stale QR sees this and nothing else.
 <div id="appBg"></div>
 <header>
 <div class="wrap">
-<button class="icon-btn" id="menuBtn" aria-label="Menu" title="Menu">&#9776;</button>
 <div class="brand-block">
 <div class="brand" id="brandMark">PAINTR<span class="z">Z</span></div>
 <div class="brand-contact" id="brandContact"></div>
 </div>
 <div class="header-actions" id="headerActions">
 <span class="credits-pill" id="creditsPill">— credits</span>
-<button class="btn btn-ghost" id="clientModeBtn" title="Hand the screen to your client">Client mode</button>
 <button class="btn btn-ghost" id="logoutBtn">Log out</button>
 </div>
+<button class="icon-btn" id="menuBtn" aria-label="Menu" title="Menu">&#9776;</button>
 </div>
 </header>
 
@@ -333,6 +333,7 @@ nothing but the PIN-gated way out — credits and log out are hidden. -->
 <aside class="side-panel">
 <button class="side-close" id="sideClose" aria-label="Close menu">&times;</button>
 <div class="side-credits" id="sideCredits">—</div>
+<button class="btn btn-ghost" id="clientModeBtn" title="Hand the screen to your client">Client mode</button>
 <button class="btn btn-ghost" id="sideLogoutBtn">Log out</button>
 <button class="btn btn-ghost" id="exitClientBtn">Exit client mode</button>
 </aside>
@@ -431,7 +432,9 @@ model guesses, and a wrong guess costs the user a real credit. -->
 
 <!-- ---- HISTORY TAB ---- -->
 <section id="tab-history" class="hidden">
+<div class="card">
 <div class="history-grid" id="historyGrid"></div>
+</div>
 </section>
 
 <!-- ---- SETTINGS TAB (branding + billing) ---- -->
