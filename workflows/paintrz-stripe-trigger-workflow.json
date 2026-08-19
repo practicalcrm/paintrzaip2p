@@ -169,7 +169,7 @@
       "typeVersion": 4.2,
       "position": [-340, -440],
       "credentials": {
-        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
       }
     },
     {
@@ -193,7 +193,7 @@
       "typeVersion": 4.2,
       "position": [-340, -240],
       "credentials": {
-        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
       }
     },
     {
@@ -217,7 +217,7 @@
       "typeVersion": 4.2,
       "position": [-340, -40],
       "credentials": {
-        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
       }
     },
     {
@@ -241,7 +241,7 @@
       "typeVersion": 4.2,
       "position": [-340, 160],
       "credentials": {
-        "httpCustomAuth": { "id": "eXe3HVVzAkOCjsWv", "name": "Paintrz Supabase service role" }
+        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
       }
     }
   ],
