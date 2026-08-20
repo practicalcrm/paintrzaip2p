@@ -251,11 +251,12 @@
           "id": "8BZNKwDvrkAm9TKo",
           "name": "supabase new api 4"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "const body = $('Webhook').first().json.body;\nconst renderRow = $('Get Render Row').first().json[0];\nconst profileRow = $('Get Profile Row').first().json[0];\nconst access = $('Compute Access').first().json;\n\nconst isCorrection = access.is_correction;\nconst targetHex = isCorrection ? renderRow.color_hex : (body.color_hex || renderRow.color_hex || null);\n\n// What the user typed in the app's \"Paint the\" box.\nconst surface = (body.surface || '').trim() || 'surface';\n\n// Up to three picks, named explicitly so the model uses these exact colours.\nconst colors = Array.isArray(body.colors) ? body.colors : [];\nconst colorList = colors.length\n  ? colors.map(c => `${c.name} (${c.hex})`).join(', ')\n  : (renderRow.color_name || body.color_name || '');\n\nlet basePrompt;\nif (targetHex || colorList) {\n  basePrompt = `Repaint the ${surface}. Use these exact colours: ${colorList || targetHex}. Keep everything else in the photo identical - same lighting, same room geometry, same hardware, same materials elsewhere.`;\n} else {\n  basePrompt = `Repaint the ${surface}: ${body.prompt || renderRow.prompt}. Keep everything else in the photo identical - same lighting, same room geometry, same hardware.`;\n}\n\nconst correctionSuffix = isCorrection ? ` Adjustment requested: \"${body.correction_prompt}\".` : '';\n\n// Corrections re-render from the UNBRANDED copy. Feeding the branded one back\n// in would composite the logo a second time, and again on every correction.\nconst initImageUrl = (isCorrection && renderRow.rendered_photo_url)\n  ? renderRow.rendered_photo_url\n  : renderRow.original_photo_url;\n\nreturn [{\n  json: {\n    render_id: renderRow.id,\n    user_id: renderRow.user_id,\n    is_correction: isCorrection,\n    free_correction: access.free_correction,\n    subscription_active: access.subscription_active,\n    target_hex: targetHex,\n    colors,\n    surface,\n    init_image_url: initImageUrl,\n    dezgo_prompt: basePrompt + correctionSuffix,\n    strength: isCorrection ? 0.3 : 0.45,\n    guidance: 7,\n    corrections_used: renderRow.corrections_used || 0,\n    brand_logo_url: body.brand_logo_url || profileRow.brand_logo_url,\n    brand_contact: body.brand_contact || profileRow.brand_contact\n  }\n}];"
+        "jsCode": "// PostgREST returns an array, and this n8n build splits it into one item per\n// row - so .first().json IS the row, and [0] on it is undefined. Confirmed\n// against execution 1416, which died here reading original_photo_url off\n// undefined. Normalise both shapes rather than betting on either.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.id) return it;\n  }\n  return null;\n}\n\nconst body = $('Webhook').first().json.body;\nconst renderRow = firstRow('Get Render Row') || {};\nconst profileRow = firstRow('Get Profile Row') || {};\nconst access = $('Compute Access').first().json;\n\nconst isCorrection = access.is_correction;\nconst targetHex = isCorrection ? renderRow.color_hex : (body.color_hex || renderRow.color_hex || null);\n\n// What the user typed in the app's \"Paint the\" box.\nconst surface = (body.surface || '').trim() || 'surface';\n\n// Up to three picks, named explicitly so the model uses these exact colours.\nconst colors = Array.isArray(body.colors) ? body.colors : [];\nconst colorList = colors.length\n  ? colors.map(c => `${c.name} (${c.hex})`).join(', ')\n  : (renderRow.color_name || body.color_name || '');\n\nlet basePrompt;\nif (targetHex || colorList) {\n  basePrompt = `Repaint the ${surface}. Use these exact colours: ${colorList || targetHex}. Keep everything else in the photo identical - same lighting, same room geometry, same hardware, same materials elsewhere.`;\n} else {\n  basePrompt = `Repaint the ${surface}: ${body.prompt || renderRow.prompt}. Keep everything else in the photo identical - same lighting, same room geometry, same hardware.`;\n}\n\nconst correctionSuffix = isCorrection ? ` Adjustment requested: \"${body.correction_prompt}\".` : '';\n\n// Corrections re-render from the UNBRANDED copy. Feeding the branded one back\n// in would composite the logo a second time, and again on every correction.\nconst initImageUrl = (isCorrection && renderRow.rendered_photo_url)\n  ? renderRow.rendered_photo_url\n  : renderRow.original_photo_url;\n\nreturn [{\n  json: {\n    render_id: renderRow.id,\n    user_id: renderRow.user_id,\n    is_correction: isCorrection,\n    free_correction: access.free_correction,\n    subscription_active: access.subscription_active,\n    target_hex: targetHex,\n    colors,\n    surface,\n    init_image_url: initImageUrl,\n    dezgo_prompt: basePrompt + correctionSuffix,\n    strength: isCorrection ? 0.3 : 0.45,\n    guidance: 7,\n    corrections_used: renderRow.corrections_used || 0,\n    brand_logo_url: body.brand_logo_url || profileRow.brand_logo_url,\n    brand_contact: body.brand_contact || profileRow.brand_contact\n  }\n}];"
       },
       "id": "build_prompt",
       "name": "Build Prompt",
@@ -264,7 +265,8 @@
       "position": [
         -300,
         -80
-      ]
+      ],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -430,7 +432,8 @@
           "id": "8BZNKwDvrkAm9TKo",
           "name": "supabase new api 4"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -780,6 +783,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -788,6 +798,13 @@
         [
           {
             "node": "Download Init Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
             "type": "main",
             "index": 0
           }
@@ -871,6 +888,13 @@
         [
           {
             "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
             "type": "main",
             "index": 0
           }
