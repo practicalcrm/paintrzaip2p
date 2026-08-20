@@ -997,6 +997,39 @@ document.getElementById('familyStep').classList.remove('hidden');
 // PaintDB caps a single response at 100 rows, so anything bigger is paginated.
 const COLORS_PAGE_SIZE = 100;
 
+// ---------- COLOR CACHE ----------
+// PaintDB's catalogue is static - 51,000 colours that do not change - so a
+// brand+family only needs fetching once per device. A large family is fifteen
+// parallel requests and well over a second; from cache it is instant.
+const COLOR_CACHE_PREFIX = 'paintrz.colors.v1.';
+const colorCacheKey = (brand, family) => COLOR_CACHE_PREFIX + brand + '.' + family;
+
+function readColorCache(brand, family){
+try {
+const raw = store.getLocal(colorCacheKey(brand, family));
+if (!raw) return null;
+const parsed = JSON.parse(raw);
+return (Array.isArray(parsed) && parsed.length) ? parsed : null;
+} catch (e){ return null; }
+}
+
+function writeColorCache(brand, family, colors){
+if (!colors || !colors.length) return;
+try {
+localStorage.setItem(colorCacheKey(brand, family), JSON.stringify(colors));
+} catch (e){
+// Almost certainly the ~5MB quota. Drop every cached family and try once
+// more, so the family the user is actually looking at wins rather than the
+// cache freezing at whatever happened to fill it first.
+try {
+Object.keys(localStorage)
+.filter(k => k.indexOf(COLOR_CACHE_PREFIX) === 0)
+.forEach(k => localStorage.removeItem(k));
+localStorage.setItem(colorCacheKey(brand, family), JSON.stringify(colors));
+} catch (e2){ /* cache is an optimisation, never a requirement - give up quietly */ }
+}
+}
+
 // `ok` lets the caller tell "this page genuinely has no colors" apart from
 // "this page failed" — without it a dropped request silently truncates a family.
 async function fetchPaintDB(query, brand, family, offset){
@@ -1112,6 +1145,18 @@ const grid = document.getElementById('swatchGrid');
 const label = document.getElementById('familyStepLabel');
 grid.innerHTML = '<div class="status-line" style="grid-column:1/-1; margin:0;">Loading colors…</div>';
 
+// Only the unfiltered family view is cached. A typed query still goes to the
+// proxy, so search results stay identical to the server's own matching rather
+// than drifting toward whatever a local filter would have done.
+if (!q){
+const cached = readColorCache(brand, family);
+if (cached){
+renderSwatches(cached, false);
+label.textContent = `${selectedBrand.name} — ${selectedFamily.name} · ${cached.length} colors`;
+return;
+}
+}
+
 const first = await fetchPaintDB(q, brand, family, 0);
 if (token !== colorsRequestToken) return; // superseded — drop this response
 const total = first.meta.total || first.data.length;
@@ -1145,6 +1190,10 @@ if (ka.h !== kb.h) return ka.h - kb.h;  // group by hue
 if (kb.s !== ka.s) return kb.s - ka.s;  // vivid before muted within a hue
 return ka.l - kb.l;                     // dark before pale as the tiebreaker
 });
+
+// Only cache a COMPLETE family. A short load caused by a dropped request must
+// never become this device's permanent answer for that family.
+if (!q && all.length && all.length >= total) writeColorCache(brand, family, all);
 
 renderSwatches(all, false);
 if (!all.length){
@@ -1384,7 +1433,32 @@ loadHistory();
 // only: the thing being guarded against is the person standing in the room,
 // so there is nothing worth syncing to an account.
 let pinPurpose = null;
-const pinIsSet = () => !!store.getLocal(CLIENT_PIN_KEY);
+// The PIN lives on the profile so it follows the account to any device, with
+// the device copy kept as a fallback for the case where profiles.client_pin
+// does not exist yet (the migration has not been run) or the write failed.
+function pinValue(){
+if (currentProfile && currentProfile.client_pin) return currentProfile.client_pin;
+return store.getLocal(CLIENT_PIN_KEY);
+}
+const pinIsSet = () => !!pinValue();
+
+async function savePin(val){
+store.setLocal(CLIENT_PIN_KEY, val);
+if (!currentUser) return;
+try {
+const { error } = await supa.from('profiles').update({ client_pin: val }).eq('id', currentUser.id);
+if (!error && currentProfile) currentProfile.client_pin = val;
+} catch (e){ /* column may not exist yet - the device copy still works */ }
+}
+
+async function clearPin(){
+store.delLocal(CLIENT_PIN_KEY);
+if (!currentUser) return;
+try {
+const { error } = await supa.from('profiles').update({ client_pin: null }).eq('id', currentUser.id);
+if (!error && currentProfile) currentProfile.client_pin = null;
+} catch (e){ /* as above */ }
+}
 
 function openPin(purpose){
 pinPurpose = purpose;
@@ -1394,6 +1468,7 @@ document.getElementById('pinHint').textContent = setting
 ? 'You will need this to get back to your account. Your client should not see you type it.'
 : 'This unlocks your account again.';
 document.getElementById('pinError').textContent = '';
+disarmForgot();
 const input = document.getElementById('pinInput');
 input.value = '';
 document.getElementById('pinModal').classList.remove('hidden');
@@ -1403,6 +1478,7 @@ input.focus();
 function closePin(){
 document.getElementById('pinModal').classList.add('hidden');
 pinPurpose = null;
+disarmForgot();
 }
 
 function submitPin(){
@@ -1411,18 +1487,18 @@ const err = document.getElementById('pinError');
 const val = input.value.trim();
 if (!/^\d{4}$/.test(val)){ err.textContent = 'Four digits.'; return; }
 if (pinPurpose === 'set'){
-store.setLocal(CLIENT_PIN_KEY, val);
+savePin(val);
 closePin();
 setClientMode(true);
 } else if (pinPurpose === 'reset'){
 // Reached only from Settings, which a client can't get to — they'd need the
 // old PIN or the account password to be out of client mode in the first place.
-store.setLocal(CLIENT_PIN_KEY, val);
+savePin(val);
 closePin();
 refreshPinStatus();
 document.getElementById('settingsStatus').textContent = 'PIN updated on this device.';
 } else {
-if (store.getLocal(CLIENT_PIN_KEY) !== val){
+if (pinValue() !== val){
 err.textContent = 'Wrong PIN.'; input.value = ''; input.focus(); return;
 }
 closePin();
@@ -1442,7 +1518,7 @@ document.getElementById('pinClearBtn').classList.toggle('hidden', !set);
 }
 document.getElementById('pinChangeBtn').addEventListener('click', () => openPin('reset'));
 document.getElementById('pinClearBtn').addEventListener('click', () => {
-store.delLocal(CLIENT_PIN_KEY);
+clearPin();
 refreshPinStatus();
 document.getElementById('settingsStatus').textContent = 'PIN cleared. You\'ll set a new one next time you start client mode.';
 });
@@ -1609,7 +1685,22 @@ document.getElementById('pinCancel').addEventListener('click', closePin);
 document.getElementById('pinBackdrop').addEventListener('click', closePin);
 // Safe to expose to whoever is holding the phone: it lands on the login
 // screen, which is worth nothing without the password.
+// Two taps, not one. This is the escape hatch for a forgotten PIN, but it ends
+// the session - and the person most likely to tap it is the client holding the
+// phone, not the contractor. Arming it first makes that deliberate.
+let forgotArmed = false;
+function disarmForgot(){
+forgotArmed = false;
+document.getElementById('pinForgot').textContent = 'Forgot PIN — sign out instead';
+}
 document.getElementById('pinForgot').addEventListener('click', async () => {
+if (!forgotArmed){
+forgotArmed = true;
+document.getElementById('pinForgot').textContent = 'Tap again to confirm sign out';
+document.getElementById('pinError').textContent = 'This ends the session on this device.';
+setTimeout(disarmForgot, 6000);
+return;
+}
 store.del(CLIENT_MODE_KEY);
 store.del(VISIT_RENDER_KEY);
 await supa.auth.signOut();
