@@ -31,10 +31,21 @@ USER root
 # silently degrades and the contact line vanishes from branded renders.
 RUN npm install -g jimp@0.22.12
 
-# Stay root. The base image would drop to `node`, but the persistent volume at
-# /home/node/.n8n was written by the previous image running as root, so every
-# file on it is root-owned. Dropping privileges makes n8n fail to read its own
-# config with EACCES, decide no encryption key exists, and try to generate a
-# fresh one - which would have orphaned every stored credential had the write
-# succeeded. A Dockerfile chown cannot fix this: the volume is mounted at run
-# time, long after the image is built.
+# Stay root. The base image would drop to `node`, and that crash-loops here:
+#   Error: EACCES: permission denied, open '/home/node/.n8n/config'
+# Railway creates the volume mount point owned by root, so an unprivileged
+# process cannot write into it. A chown in this file cannot help - the volume
+# is mounted at run time, long after the image is built.
+#
+# The volume was EMPTY before 20 Aug 2026, not merely root-owned. The old
+# container ran as root with HOME=/root, so n8n kept its state in /root/.n8n on
+# the ephemeral container filesystem and never touched the mount. Proof: the
+# first successful root boot could read /home/node/.n8n/config and still logged
+# `Credentials could not be decrypted` - it had just generated that config
+# itself. Had a valid config been sitting on the volume, root would have read
+# it and the credentials would have decrypted.
+#
+# So the encryption key was always one image swap away from being destroyed.
+# The durable fix is not this line - it is setting N8N_ENCRYPTION_KEY as a
+# Railway variable, after which n8n never generates a key whatever the volume
+# holds. Treat that variable as required, not optional.
