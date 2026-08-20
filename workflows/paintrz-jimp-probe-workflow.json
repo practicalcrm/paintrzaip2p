@@ -1,0 +1,104 @@
+{
+  "name": "Paintrz — TEMP jimp probe",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "paintrz-jimp-probe",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b1a70f10-0001-4a10-9c31-0f7a2b3c4d01",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        288
+      ],
+      "webhookId": "b1a70f10-0002-4a10-9c31-0f7a2b3c4d02"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Answers, in one webhook call, every open question about jimp in the task runner.\n// It must NEVER throw: a throw kills the execution before the Respond node, which\n// is exactly the empty-200 failure mode the guest status endpoint already has.\nconst out = { ok: false, resolved: false, works: false };\n\nconst safe = (fn, fallback) => { try { return fn(); } catch (e) { return fallback; } };\n\n// Env access may be blocked by N8N_BLOCK_ENV_ACCESS_IN_NODE - that is itself a finding.\nout.node_path = safe(() => process.env.NODE_PATH || null, 'env access blocked');\nout.allow_external = safe(() => process.env.NODE_FUNCTION_ALLOW_EXTERNAL || null, 'env access blocked');\nout.runners_mode = safe(() => process.env.N8N_RUNNERS_MODE || null, 'env access blocked');\nout.exec_path = safe(() => process.execPath, null);\nout.cwd = safe(() => process.cwd(), null);\nout.node_version = safe(() => process.version, null);\n\nlet JimpPkg = null;\ntry {\n  JimpPkg = require('jimp');\n  out.resolved = true;\n} catch (e) {\n  // The require stack names the directory tree actually searched. That is the\n  // single most useful line for deciding where to install jimp.\n  out.error = String((e && e.message) || e);\n  out.require_stack = (e && e.requireStack) ? e.requireStack.slice(0, 8) : null;\n  return [{ json: out }];\n}\n\nconst Jimp = JimpPkg.Jimp || JimpPkg;\nout.api = JimpPkg.Jimp ? 'v1' : 'v0';\nout.exports = Object.keys(JimpPkg).slice(0, 25);\n\n// Resolving is not the same as working - decode, resize and re-encode for real,\n// using the same either-version calls the render node makes.\ntry {\n  const PNG_1X1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';\n  const img = await Jimp.read(Buffer.from(PNG_1X1, 'base64'));\n  out.decoded = { w: img.bitmap.width, h: img.bitmap.height };\n  try { img.resize({ w: 4, h: 4 }); } catch (e) { img.resize(4, 4); }\n  out.resized = { w: img.bitmap.width, h: img.bitmap.height };\n  const mime = JimpPkg.JimpMime ? JimpPkg.JimpMime.jpeg : 'image/jpeg';\n  const buf = img.getBuffer ? await img.getBuffer(mime) : await img.getBufferAsync(mime);\n  out.jpeg_bytes = buf.length;\n  out.works = buf.length > 0;\n  out.ok = true;\n} catch (e) {\n  out.error = String((e && e.message) || e);\n}\n\n// Fonts ship as separate packages in v1. The render node degrades quietly when\n// they are missing, so this is the only place it would ever be noticed.\ntry {\n  const loadFont = JimpPkg.loadFont || Jimp.loadFont;\n  const fontPath = JimpPkg.FONT_SANS_16_WHITE || Jimp.FONT_SANS_16_WHITE;\n  out.font_available = !!(loadFont && fontPath);\n  if (loadFont && fontPath) { await loadFont(fontPath); out.font_loads = true; }\n} catch (e) {\n  out.font_loads = false;\n  out.font_error = String((e && e.message) || e);\n}\n\nreturn [{ json: out }];\n"
+      },
+      "id": "b1a70f10-0003-4a10-9c31-0f7a2b3c4d03",
+      "name": "Probe jimp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        288
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "b1a70f10-0004-4a10-9c31-0f7a2b3c4d04",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## TEMP — delete once a render completes\nGET the production URL of this webhook. It answers the whole jimp question in one call, without spending a credit or a Dezgo generation:\n\n- `resolved` — did the **task runner** find jimp (the main process finding it proved nothing)\n- `require_stack` — the directories actually searched, when it did not\n- `node_path` / `allow_external` / `runners_mode` — what the container really has, or `env access blocked`\n- `works` — decode + resize + re-encode for real, since resolving is not working\n- `api` — v0 or v1, which the render node branches on\n- `font_loads` — the branding path degrades silently without it\n\nThe Code node is set to **continue on error** and never throws, so the webhook always answers.\n\nUnpublish and archive this once the render pipeline completes end to end.",
+        "height": 420,
+        "width": 380
+      },
+      "id": "b1a70f10-0005-4a10-9c31-0f7a2b3c4d05",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -180
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Probe jimp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe jimp": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
