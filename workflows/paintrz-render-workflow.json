@@ -12,7 +12,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-1840, 0]
+      "position": [
+        -1840,
+        0
+      ]
     },
     {
       "parameters": {
@@ -25,9 +28,15 @@
       "name": "Get Render Row",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1620, 0],
+      "position": [
+        -1620,
+        0
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -41,20 +50,29 @@
       "name": "Get Profile Row",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1400, 0],
+      "position": [
+        -1400,
+        0
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
       "parameters": {
-        "jsCode": "const profile = ($('Get Profile Row').first().json || [])[0] || {};\nconst active = profile.subscription_status === 'active';\n\n// Most recent monthly anniversary of the subscription start, anchored to the\n// original date rather than stepped month by month, so it cannot drift.\n// Counting calendar months instead would hand someone who subscribed on the\n// 20th a fresh allowance eleven days later.\nfunction periodStart(startedAt){\n  if (!startedAt) return null;\n  const start = new Date(startedAt);\n  if (isNaN(start)) return null;\n  const now = new Date();\n  let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());\n  if (now.getDate() < start.getDate()) months--;\n  if (months < 0) months = 0;\n  const d = new Date(start);\n  d.setMonth(start.getMonth() + months);\n  return d;\n}\n\nconst ps = active ? periodStart(profile.subscription_started_at) : null;\n\n// Epoch fallback keeps the follow-up query valid; the result is ignored when\n// has_period is false.\nreturn [{ json: { period_start: (ps || new Date(0)).toISOString(), has_period: !!ps } }];"
+        "jsCode": "// PostgREST returns an array. Depending on the n8n build that arrives either as\n// one item holding that array, or as one item per row - so normalise both\n// rather than betting on one. Betting on [0] silently yields undefined on the\n// other shape, and downstream that reads as \"this row does not exist\", which\n// denies a perfectly valid user with a 402.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.id) return it;\n  }\n  return null;\n}\n\nconst profile = firstRow('Get Profile Row') || {};\nconst active = profile.subscription_status === 'active';\n\n// Most recent monthly anniversary of the subscription start, anchored to the\n// original date rather than stepped month by month, so it cannot drift.\n// Counting calendar months instead would hand someone who subscribed on the\n// 20th a fresh allowance eleven days later.\nfunction periodStart(startedAt){\n  if (!startedAt) return null;\n  const start = new Date(startedAt);\n  if (isNaN(start)) return null;\n  const now = new Date();\n  let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());\n  if (now.getDate() < start.getDate()) months--;\n  if (months < 0) months = 0;\n  const d = new Date(start);\n  d.setMonth(start.getMonth() + months);\n  return d;\n}\n\nconst ps = active ? periodStart(profile.subscription_started_at) : null;\n\n// Epoch fallback keeps the follow-up query valid; the result is ignored when\n// has_period is false.\nreturn [{ json: { period_start: (ps || new Date(0)).toISOString(), has_period: !!ps } }];"
       },
       "id": "compute_period",
       "name": "Compute Period",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1290, 160]
+      "position": [
+        -1290,
+        160
+      ]
     },
     {
       "parameters": {
@@ -67,32 +85,48 @@
       "name": "Count Period Renders",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1180, 160],
+      "position": [
+        -1180,
+        160
+      ],
       "onError": "continueRegularOutput",
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
       "parameters": {
-        "jsCode": "const body = $('Webhook').first().json.body;\nconst renderRow = ($('Get Render Row').first().json || [])[0];\nconst profileRow = ($('Get Profile Row').first().json || [])[0];\nconst FREE_CORRECTIONS = 2;\n\n// Monthly render allowance per plan. Without this a $5 Starter account could\n// render without limit. Studio is SOLD as unlimited, so its number is a safety\n// ceiling against runaway image-gen spend rather than an advertised quota - a\n// normal user never reaches it.\nconst PLAN_ALLOWANCE = { starter: 7, crew: 16, pro: 35, studio: 300 };\nfunction allowanceFor(planName){\n  const p = (planName || '').trim().toLowerCase();\n  const key = Object.keys(PLAN_ALLOWANCE).find(k => p.includes(k));\n  return key ? PLAN_ALLOWANCE[key] : null;\n}\n\n// The webhook is public and takes render_id and user_id as separate inputs.\n// Without this check a caller could pass their own user_id alongside someone\n// else's render_id and write to a stranger's render.\nconst rowsExist = !!renderRow && !!profileRow;\nconst ownsRender = rowsExist && renderRow.user_id === body.user_id;\n\nconst isCorrection = !!body.correction_prompt;\nconst subscriptionActive = rowsExist && profileRow.subscription_status === 'active';\nconst hasCredits = rowsExist && (profileRow.credits_balance || 0) >= 1;\nconst freeCorrection = isCorrection && rowsExist && (renderRow.corrections_used || 0) < FREE_CORRECTIONS;\n\n// Usage this billing period. A correction reuses its original render row, so\n// it never counts a second time against the allowance.\nconst period = $('Compute Period').first().json || {};\nconst used = $('Count Period Renders').all().map(i => i.json).filter(j => j && j.id).length;\nconst allowance = subscriptionActive ? allowanceFor(profileRow.subscription_plan) : null;\n\n// Fail open on anything unknown - an unrecognised plan name or a missing\n// period anchor must not lock a paying customer out.\nconst allowanceApplies = subscriptionActive && !!allowance && !!period.has_period && !isCorrection;\nconst withinAllowance = !allowanceApplies || used < allowance;\nconst overAllowance = allowanceApplies && !withinAllowance;\n\nconst allowed = ownsRender && (\n  (subscriptionActive && withinAllowance) || hasCredits || freeCorrection\n);\n\n// Decided once here so the charge and the refund can never disagree.\nconst shouldCharge = allowed && !subscriptionActive && (!isCorrection || !freeCorrection);\n\nreturn [{\n  json: {\n    allowed,\n    should_charge: shouldCharge,\n    owns_render: ownsRender,\n    rows_exist: rowsExist,\n    is_correction: isCorrection,\n    free_correction: freeCorrection,\n    subscription_active: subscriptionActive,\n    over_allowance: overAllowance,\n    period_used: used,\n    period_allowance: allowance\n  }\n}];"
+        "jsCode": "// PostgREST returns an array. Depending on the n8n build that arrives either as\n// one item holding that array, or as one item per row - so normalise both\n// rather than betting on one. Betting on [0] silently yields undefined on the\n// other shape, and downstream that reads as \"this row does not exist\", which\n// denies a perfectly valid user with a 402.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.id) return it;\n  }\n  return null;\n}\n\nconst body = $('Webhook').first().json.body;\nconst renderRow = firstRow('Get Render Row');\nconst profileRow = firstRow('Get Profile Row');\nconst FREE_CORRECTIONS = 2;\n\n// Monthly render allowance per plan. Without this a $5 Starter account could\n// render without limit. Studio is SOLD as unlimited, so its number is a safety\n// ceiling against runaway image-gen spend rather than an advertised quota - a\n// normal user never reaches it.\nconst PLAN_ALLOWANCE = { starter: 7, crew: 16, pro: 35, studio: 300 };\nfunction allowanceFor(planName){\n  const p = (planName || '').trim().toLowerCase();\n  const key = Object.keys(PLAN_ALLOWANCE).find(k => p.includes(k));\n  return key ? PLAN_ALLOWANCE[key] : null;\n}\n\n// The webhook is public and takes render_id and user_id as separate inputs.\n// Without this check a caller could pass their own user_id alongside someone\n// else's render_id and write to a stranger's render.\nconst rowsExist = !!renderRow && !!profileRow;\nconst ownsRender = rowsExist && renderRow.user_id === body.user_id;\n\nconst isCorrection = !!body.correction_prompt;\nconst subscriptionActive = rowsExist && profileRow.subscription_status === 'active';\nconst hasCredits = rowsExist && (profileRow.credits_balance || 0) >= 1;\nconst freeCorrection = isCorrection && rowsExist && (renderRow.corrections_used || 0) < FREE_CORRECTIONS;\n\n// Usage this billing period. A correction reuses its original render row, so\n// it never counts a second time against the allowance.\nconst period = $('Compute Period').first().json || {};\nconst used = $('Count Period Renders').all().map(i => i.json).filter(j => j && j.id).length;\nconst allowance = subscriptionActive ? allowanceFor(profileRow.subscription_plan) : null;\n\n// Fail open on anything unknown - an unrecognised plan name or a missing\n// period anchor must not lock a paying customer out.\nconst allowanceApplies = subscriptionActive && !!allowance && !!period.has_period && !isCorrection;\nconst withinAllowance = !allowanceApplies || used < allowance;\nconst overAllowance = allowanceApplies && !withinAllowance;\n\nconst allowed = ownsRender && (\n  (subscriptionActive && withinAllowance) || hasCredits || freeCorrection\n);\n\n// Decided once here so the charge and the refund can never disagree.\nconst shouldCharge = allowed && !subscriptionActive && (!isCorrection || !freeCorrection);\n\nreturn [{\n  json: {\n    allowed,\n    should_charge: shouldCharge,\n    owns_render: ownsRender,\n    rows_exist: rowsExist,\n    is_correction: isCorrection,\n    free_correction: freeCorrection,\n    subscription_active: subscriptionActive,\n    over_allowance: overAllowance,\n    period_used: used,\n    period_allowance: allowance\n  }\n}];"
       },
       "id": "compute_access",
       "name": "Compute Access",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1180, 0]
+      "position": [
+        -1180,
+        0
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "cond1",
               "leftValue": "={{ $json.allowed }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -103,7 +137,10 @@
       "name": "Has Access?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [-960, 0]
+      "position": [
+        -960,
+        0
+      ]
     },
     {
       "parameters": {
@@ -114,7 +151,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -126,34 +166,52 @@
       "name": "Mark Insufficient",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-740, 260],
+      "position": [
+        -740,
+        260
+      ],
       "onError": "continueRegularOutput",
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { \"ok\": false, \"reason\": !$('Compute Access').item.json.owns_render ? \"not_authorized\" : ($('Compute Access').item.json.over_allowance ? \"plan_limit_reached\" : \"insufficient_credits\"), \"used\": $('Compute Access').item.json.period_used, \"allowance\": $('Compute Access').item.json.period_allowance } }}",
-        "options": { "responseCode": 402 }
+        "options": {
+          "responseCode": 402
+        }
       },
       "id": "respond_insufficient",
       "name": "Respond Insufficient",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [-520, 260]
+      "position": [
+        -520,
+        260
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "charge",
               "leftValue": "={{ $('Compute Access').item.json.should_charge }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -164,7 +222,10 @@
       "name": "Charge Now?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [-740, -80]
+      "position": [
+        -740,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -181,9 +242,15 @@
       "name": "Deduct Credit",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-520, -180],
+      "position": [
+        -520,
+        -180
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -194,20 +261,31 @@
       "name": "Build Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-300, -80]
+      "position": [
+        -300,
+        -80
+      ]
     },
     {
       "parameters": {
         "url": "={{ $json.init_image_url }}",
         "options": {
-          "response": { "response": { "responseFormat": "file", "outputPropertyName": "original" } }
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "original"
+            }
+          }
         }
       },
       "id": "download_init_image",
       "name": "Download Init Image",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-80, -80],
+      "position": [
+        -80,
+        -80
+      ],
       "onError": "continueErrorOutput"
     },
     {
@@ -220,24 +298,48 @@
         "contentType": "multipart-form-data",
         "bodyParameters": {
           "parameters": [
-            { "parameterType": "formBinaryData", "name": "init_image", "inputDataFieldName": "original" },
-            { "name": "prompt", "value": "={{ $('Build Prompt').item.json.dezgo_prompt }}" },
-            { "name": "strength", "value": "={{ $('Build Prompt').item.json.strength }}" },
-            { "name": "guidance", "value": "={{ $('Build Prompt').item.json.guidance }}" }
+            {
+              "parameterType": "formBinaryData",
+              "name": "init_image",
+              "inputDataFieldName": "original"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ $('Build Prompt').item.json.dezgo_prompt }}"
+            },
+            {
+              "name": "strength",
+              "value": "={{ $('Build Prompt').item.json.strength }}"
+            },
+            {
+              "name": "guidance",
+              "value": "={{ $('Build Prompt').item.json.guidance }}"
+            }
           ]
         },
         "options": {
-          "response": { "response": { "responseFormat": "file", "outputPropertyName": "data" } }
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
         }
       },
       "id": "call_dezgo",
       "name": "Call Dezgo Flux 2",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [140, -80],
+      "position": [
+        140,
+        -80
+      ],
       "onError": "continueErrorOutput",
       "credentials": {
-        "httpHeaderAuth": { "id": "Oj08owu4zivP6hbD", "name": "Paintrz Dezgo API key" }
+        "httpHeaderAuth": {
+          "id": "Oj08owu4zivP6hbD",
+          "name": "Paintrz Dezgo API key"
+        }
       }
     },
     {
@@ -248,7 +350,10 @@
       "name": "Color Correct + Brand",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [360, -80],
+      "position": [
+        360,
+        -80
+      ],
       "onError": "continueErrorOutput"
     },
     {
@@ -260,8 +365,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "image/jpeg" },
-            { "name": "x-upsert", "value": "true" }
+            {
+              "name": "Content-Type",
+              "value": "image/jpeg"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
           ]
         },
         "sendBody": true,
@@ -273,10 +384,16 @@
       "name": "Upload Render Variants",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [580, -80],
+      "position": [
+        580,
+        -80
+      ],
       "onError": "continueErrorOutput",
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -288,7 +405,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -300,10 +420,16 @@
       "name": "Update Render Row",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [800, -80],
+      "position": [
+        800,
+        -80
+      ],
       "executeOnce": true,
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -316,7 +442,10 @@
       "name": "Respond Success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1020, -80]
+      "position": [
+        1020,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -327,7 +456,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -339,23 +471,36 @@
       "name": "Mark Failed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [580, 260],
+      "position": [
+        580,
+        260
+      ],
       "onError": "continueRegularOutput",
       "executeOnce": true,
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "wascharged",
               "leftValue": "={{ $('Compute Access').item.json.should_charge }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -366,7 +511,10 @@
       "name": "Refund If Charged?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [800, 260]
+      "position": [
+        800,
+        260
+      ]
     },
     {
       "parameters": {
@@ -383,24 +531,35 @@
       "name": "Refund Credit",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1020, 180],
+      "position": [
+        1020,
+        180
+      ],
       "onError": "continueRegularOutput",
       "executeOnce": true,
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { \"ok\": false, \"reason\": \"render_failed\" } }}",
-        "options": { "responseCode": 500 }
+        "options": {
+          "responseCode": 500
+        }
       },
       "id": "respond_failed",
       "name": "Respond Failed",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1240, 260]
+      "position": [
+        1240,
+        260
+      ]
     },
     {
       "parameters": {
@@ -413,7 +572,10 @@
       "name": "Sticky — Credentials",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-1840, -460]
+      "position": [
+        -1840,
+        -460
+      ]
     },
     {
       "parameters": {
@@ -426,7 +588,10 @@
       "name": "Sticky — Runtime Requirements",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-1400, -460]
+      "position": [
+        -1400,
+        -460
+      ]
     },
     {
       "parameters": {
@@ -439,7 +604,10 @@
       "name": "Sticky — Credit Ordering",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-740, -440]
+      "position": [
+        -740,
+        -440
+      ]
     },
     {
       "parameters": {
@@ -452,7 +620,10 @@
       "name": "Sticky — Image Variants",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [360, -440]
+      "position": [
+        360,
+        -440
+      ]
     },
     {
       "parameters": {
@@ -465,7 +636,10 @@
       "name": "Sticky — Failure Path",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [540, 480]
+      "position": [
+        540,
+        480
+      ]
     },
     {
       "parameters": {
@@ -478,65 +652,274 @@
       "name": "Sticky — Webhook Contract",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-1840, 220]
+      "position": [
+        -1840,
+        220
+      ]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Get Render Row", "type": "main", "index": 0 }]] },
-    "Get Render Row": { "main": [[{ "node": "Get Profile Row", "type": "main", "index": 0 }]] },
-    "Get Profile Row": { "main": [[{ "node": "Compute Period", "type": "main", "index": 0 }]] },
-    "Compute Period": { "main": [[{ "node": "Count Period Renders", "type": "main", "index": 0 }]] },
-    "Count Period Renders": { "main": [[{ "node": "Compute Access", "type": "main", "index": 0 }]] },
-    "Compute Access": { "main": [[{ "node": "Has Access?", "type": "main", "index": 0 }]] },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Render Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Render Row": {
+      "main": [
+        [
+          {
+            "node": "Get Profile Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Profile Row": {
+      "main": [
+        [
+          {
+            "node": "Compute Period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Period": {
+      "main": [
+        [
+          {
+            "node": "Count Period Renders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Period Renders": {
+      "main": [
+        [
+          {
+            "node": "Compute Access",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Access": {
+      "main": [
+        [
+          {
+            "node": "Has Access?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Has Access?": {
       "main": [
-        [{ "node": "Charge Now?", "type": "main", "index": 0 }],
-        [{ "node": "Mark Insufficient", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Charge Now?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Insufficient",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Mark Insufficient": { "main": [[{ "node": "Respond Insufficient", "type": "main", "index": 0 }]] },
+    "Mark Insufficient": {
+      "main": [
+        [
+          {
+            "node": "Respond Insufficient",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Charge Now?": {
       "main": [
-        [{ "node": "Deduct Credit", "type": "main", "index": 0 }],
-        [{ "node": "Build Prompt", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Deduct Credit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Deduct Credit": { "main": [[{ "node": "Build Prompt", "type": "main", "index": 0 }]] },
-    "Build Prompt": { "main": [[{ "node": "Download Init Image", "type": "main", "index": 0 }]] },
+    "Deduct Credit": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Download Init Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Download Init Image": {
       "main": [
-        [{ "node": "Call Dezgo Flux 2", "type": "main", "index": 0 }],
-        [{ "node": "Mark Failed", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Call Dezgo Flux 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Call Dezgo Flux 2": {
       "main": [
-        [{ "node": "Color Correct + Brand", "type": "main", "index": 0 }],
-        [{ "node": "Mark Failed", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Color Correct + Brand",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Color Correct + Brand": {
       "main": [
-        [{ "node": "Upload Render Variants", "type": "main", "index": 0 }],
-        [{ "node": "Mark Failed", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Upload Render Variants",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Upload Render Variants": {
       "main": [
-        [{ "node": "Update Render Row", "type": "main", "index": 0 }],
-        [{ "node": "Mark Failed", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Update Render Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Update Render Row": { "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]] },
-    "Mark Failed": { "main": [[{ "node": "Refund If Charged?", "type": "main", "index": 0 }]] },
+    "Update Render Row": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Failed": {
+      "main": [
+        [
+          {
+            "node": "Refund If Charged?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Refund If Charged?": {
       "main": [
-        [{ "node": "Refund Credit", "type": "main", "index": 0 }],
-        [{ "node": "Respond Failed", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Refund Credit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Refund Credit": { "main": [[{ "node": "Respond Failed", "type": "main", "index": 0 }]] }
+    "Refund Credit": {
+      "main": [
+        [
+          {
+            "node": "Respond Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "pinData": {},
-  "meta": { "instanceId": "paintrz" }
+  "meta": {
+    "instanceId": "paintrz"
+  }
 }

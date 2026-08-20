@@ -1324,7 +1324,18 @@ brand_logo_url: currentProfile.brand_logo_url,
 brand_contact: currentProfile.brand_contact
 })
 });
-if (!resp.ok) throw new Error('Webhook returned ' + resp.status);
+if (!resp.ok){
+// The pipeline says exactly why it refused; throwing the bare status threw
+// that away and left "webhook returned 402" as the entire diagnosis.
+let reason = null;
+try { reason = (await resp.json()).reason; } catch (e){ /* no body to read */ }
+const SAYS = {
+not_authorized: "That render could not be matched to your account. Try again, and tell support if it repeats.",
+plan_limit_reached: "You've used every render on your plan this period — upgrade under Settings for more.",
+insufficient_credits: "You're out of credits — buy a pack under Settings."
+};
+throw new Error(SAYS[reason] || ('the render service returned ' + resp.status + (reason ? ' (' + reason + ')' : '')));
+}
 } catch (e){
 statusEl.textContent = 'Render request failed: ' + e.message;
 return;
