@@ -31,4 +31,10 @@ USER root
 # silently degrades and the contact line vanishes from branded renders.
 RUN npm install -g jimp@0.22.12
 
-USER node
+# Stay root. The base image would drop to `node`, but the persistent volume at
+# /home/node/.n8n was written by the previous image running as root, so every
+# file on it is root-owned. Dropping privileges makes n8n fail to read its own
+# config with EACCES, decide no encryption key exists, and try to generate a
+# fresh one - which would have orphaned every stored credential had the write
+# succeeded. A Dockerfile chown cannot fix this: the volume is mounted at run
+# time, long after the image is built.
