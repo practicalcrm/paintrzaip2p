@@ -152,6 +152,12 @@ client mode + log out without every label wrapping onto three lines. */
 /* Which account you are signed in as - the header is white-labelled to the
 contractor's own brand, so this menu is the only place it can be stated. */
 .side-email{font-size:12px; color:var(--muted-2); word-break:break-all; line-height:1.45; padding:0 2px;}
+/* Guest links is Studio-only. Shown to everyone rather than hidden from
+non-subscribers: a locked door people can see is what sells the upgrade, and a
+menu that silently lacks an entry sells nothing. */
+#sideGuestBtn{display:flex; align-items:center; justify-content:center; gap:8px;}
+#sideGuestBtn.locked{opacity:0.7;}
+.lock-tag{font-size:9.5px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:var(--teal); color:#fff; border-radius:999px; padding:2px 7px; line-height:1.5;}
 
 @media (max-width:720px){
 .icon-btn{display:inline-flex; align-items:center; justify-content:center;}
@@ -177,7 +183,8 @@ forced visible at every width here; outside client mode it is a phone-only
 control, and without this there would be no exit at all on a laptop. */
 #app.client-mode #menuBtn{display:inline-flex !important; align-items:center; justify-content:center;}
 #app.client-mode #sideCredits, #app.client-mode #sideLogoutBtn, #app.client-mode #clientModeBtn,
-#app.client-mode #sideSettingsBtn, #app.client-mode #sideEmail{display:none !important;}
+#app.client-mode #sideSettingsBtn, #app.client-mode #sideEmail,
+#app.client-mode #sideGuestBtn{display:none !important;}
 nav.tabs button[data-tab="settings"]{display:none;}
 #exitClientBtn{display:none;}
 #app.client-mode #exitClientBtn{display:block; width:100%;}
@@ -340,6 +347,7 @@ nothing but the PIN-gated way out — credits and log out are hidden. -->
 <div class="side-email" id="sideEmail"></div>
 <div class="side-credits" id="sideCredits">—</div>
 <button class="btn btn-ghost" id="sideSettingsBtn">Settings</button>
+<button class="btn btn-ghost" id="sideGuestBtn">Guest links</button>
 <button class="btn btn-ghost" id="clientModeBtn" title="Hand the screen to your client">Client mode</button>
 <button class="btn btn-ghost" id="sideLogoutBtn">Log out</button>
 <button class="btn btn-ghost" id="exitClientBtn">Exit client mode</button>
@@ -449,7 +457,9 @@ model guesses, and a wrong guess costs the user a real credit. -->
 <div class="card">
 <h3 style="margin-bottom:8px;">Current plan</h3>
 <p class="status-line" id="planStatus">—</p>
+<button type="button" class="btn btn-ghost" id="togglePlansBtn" style="margin-top:14px;">View all plans</button>
 </div>
+<div id="planCardsWrap" class="hidden">
 <div class="plan-cards" style="flex-wrap:wrap;">
 <div class="card" style="min-width:180px;">
 <h3>Pay As You Go</h3>
@@ -473,8 +483,9 @@ model guesses, and a wrong guess costs the user a real credit. -->
 </div>
 <div class="card" style="min-width:180px;">
 <h3>Studio — $40/mo</h3>
-<p class="status-line">80 renders / month.</p>
+<p class="status-line">Unlimited renders.</p>
 <button class="btn btn-ghost tier-btn" data-link="https://buy.stripe.com/fZu28rdXjeqg9JE004bfO04" style="margin-top:14px; width:100%;">Subscribe</button>
+</div>
 </div>
 </div>
 
@@ -1657,6 +1668,7 @@ document.getElementById('sideMenu').classList.toggle('hidden', !on);
 if (on){
 document.getElementById('sideCredits').textContent = document.getElementById('creditsPill').textContent;
 document.getElementById('sideEmail').textContent = (currentUser && currentUser.email) ? currentUser.email : '';
+refreshGuestMenuEntry();
 }
 }
 
@@ -1666,6 +1678,39 @@ document.getElementById('sideEmail').textContent = (currentUser && currentUser.e
 document.getElementById('sideSettingsBtn').addEventListener('click', () => {
 document.querySelector('nav.tabs button[data-tab="settings"]').click();
 openSideMenu(false);
+});
+
+// Guest links is Studio-only, and the locked state is deliberate: a
+// non-subscriber sees the feature exists and is taken straight to the pricing,
+// already expanded, rather than to a card that only says no.
+function refreshGuestMenuEntry(){
+const btn = document.getElementById('sideGuestBtn');
+if (!btn) return;
+const studio = ownerIsStudio();
+btn.classList.toggle('locked', !studio);
+btn.textContent = 'Guest links';
+if (!studio){
+const tag = document.createElement('span');
+tag.className = 'lock-tag';
+tag.textContent = 'Studio';
+btn.appendChild(tag);
+}
+}
+
+document.getElementById('sideGuestBtn').addEventListener('click', () => {
+document.querySelector('nav.tabs button[data-tab="settings"]').click();
+openSideMenu(false);
+if (ownerIsStudio()){
+const card = document.getElementById('guestGate').closest('.card');
+if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+} else {
+// Open the plans on the way past - this is the one place in the app where
+// hitting a paywall should land on the price list, not a dead end.
+const wrap = document.getElementById('planCardsWrap');
+wrap.classList.remove('hidden');
+document.getElementById('togglePlansBtn').textContent = 'Hide plans';
+wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 });
 document.getElementById('menuBtn').addEventListener('click', () => openSideMenu(true));
 document.getElementById('sideClose').addEventListener('click', () => openSideMenu(false));
@@ -2133,6 +2178,9 @@ setLogoPreview(currentProfile.brand_logo_url || null);
 document.getElementById('settingsStatus').textContent = '';
 refreshPinStatus();
 loadGuestLinks();
+// Re-collapse on every visit, so the plan list never becomes the default view.
+document.getElementById('planCardsWrap').classList.add('hidden');
+document.getElementById('togglePlansBtn').textContent = plansButtonLabel();
 pendingLogoFile = null;
 pendingLogoRemoval = false;
 }
@@ -2191,6 +2239,20 @@ statusEl.textContent = 'Saved. Your branding is on every render from here on.';
 });
 
 // ---------- BILLING ----------
+// Plans stay collapsed behind a button. Someone already paying should not have
+// a cheaper tier presented to them every time they open Settings, but the
+// option still has to be reachable - so it is one tap away rather than gone.
+function plansButtonLabel(){
+const subscribed = currentProfile && currentProfile.subscription_status === 'active';
+return subscribed ? 'Change plan' : 'View plans & credits';
+}
+
+document.getElementById('togglePlansBtn').addEventListener('click', () => {
+const wrap = document.getElementById('planCardsWrap');
+const nowOpen = wrap.classList.toggle('hidden') === false;
+document.getElementById('togglePlansBtn').textContent = nowOpen ? 'Hide plans' : plansButtonLabel();
+});
+
 document.querySelectorAll('.tier-btn').forEach(btn => {
 btn.addEventListener('click', () => {
 // client_reference_id lets your Stripe webhook know which account to credit
