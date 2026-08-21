@@ -568,7 +568,7 @@
     },
     {
       "parameters": {
-        "content": "## Still needs jimp\n`NODE_FUNCTION_ALLOW_EXTERNAL=jimp` plus `npm install jimp` in the container. That one is an *external package* allowance, which is unrelated to the env-access flag and is safe to keep.\n\nThe schema needs `decrement_credit(uid)` and `increment_credits(uid, amount)` — the refund path uses the second.\n\nThe `photos` bucket must be **public**, or the `/public/` URLs written back will 404.",
+        "content": "## Colour pass runs in the image service\nThe LAB correction and branding moved to the **paintrzaip2p** service at\n`http://paintrzaip2p.railway.internal:8080/correct`, over Railway private networking.\n\njimp is gone. Code nodes execute in a separate `@n8n/task-runner` process that dies outright when jimp is required, and n8n cannot scale past one replica while a volume is attached. `NODE_FUNCTION_ALLOW_EXTERNAL` is no longer needed for this pipeline.\n\nThe schema needs `decrement_credit(uid)` and `increment_credits(uid, amount)` — the refund path uses the second.\n\nThe `photos` bucket must be **public**, or the `/public/` URLs written back will 404.",
         "height": 260,
         "width": 380,
         "color": 4
