@@ -1,0 +1,162 @@
+// Paintrz image service.
+//
+// Exists because the colour pass cannot run inside n8n: Code nodes execute in a
+// separate @n8n/task-runner process that dies outright when jimp is required,
+// and n8n is capped at one replica while a volume is attached. This is a pure
+// function - images in, images out. n8n still performs every Supabase write, so
+// the credit, refund and error-routing logic stays where it already works.
+
+const express = require('express');
+const sharp = require('sharp');
+const { correct } = require('./color');
+
+const app = express();
+
+// Renders are a few MB of base64. The default 100kb limit would reject every
+// real request with a confusing 413.
+app.use(express.json({ limit: '32mb' }));
+
+const PORT = process.env.PORT || 3000;
+const TOKEN = process.env.IMAGE_SERVICE_TOKEN || '';
+const FETCH_TIMEOUT_MS = 20000;
+
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'paintrz-image', sharp: sharp.versions }));
+
+// Reached over Railway private networking, so this is defence in depth rather
+// than the only thing standing between the service and the internet.
+app.use((req, res, next) => {
+  if (!TOKEN) return next();
+  if (req.get('x-service-token') === TOKEN) return next();
+  return res.status(401).json({ ok: false, reason: 'unauthorized' });
+});
+
+async function fetchBuffer(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) throw new Error(`${r.status} fetching ${url}`);
+    return Buffer.from(await r.arrayBuffer());
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Accepts either a URL or inline base64 for each image, because the original
+// photo lives at a public Supabase URL while the model's output only ever
+// exists as binary inside the n8n execution.
+async function resolveImage(url, b64, label) {
+  if (b64) return Buffer.from(b64, 'base64');
+  if (url) return fetchBuffer(url);
+  throw new Error(`missing ${label}`);
+}
+
+function escapeXml(s) {
+  return String(s).replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+}
+
+/**
+ * Brand a copy of the corrected image.
+ *
+ * Always works on a clone. The unbranded copy is what corrections re-render
+ * from - branding the source would stamp the logo again on every correction,
+ * compounding each time.
+ */
+async function brand(buffer, width, height, logoUrl, contact) {
+  const layers = [];
+
+  if (logoUrl) {
+    try {
+      const targetH = Math.max(1, Math.round(height * 0.08));
+      const logo = await sharp(await fetchBuffer(logoUrl))
+        .resize({ height: targetH, fit: 'inside', withoutEnlargement: false })
+        .png()
+        .toBuffer();
+      const meta = await sharp(logo).metadata();
+      layers.push({ input: logo, left: 16, top: Math.max(0, height - (meta.height || targetH) - 16) });
+    } catch (e) {
+      // A missing or broken logo URL must not cost the customer their render.
+      console.warn('logo skipped:', e.message);
+    }
+  }
+
+  if (contact) {
+    // Text as an SVG overlay rather than a font file: sharp has no text API,
+    // and this avoids shipping and loading font binaries entirely.
+    const fontSize = Math.max(12, Math.round(height * 0.022));
+    const svg = Buffer.from(
+      `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+         <text x="16" y="${height - 14}" font-family="Inter, Helvetica, Arial, sans-serif"
+               font-size="${fontSize}" fill="#ffffff"
+               style="paint-order:stroke; stroke:#000000; stroke-width:${Math.max(2, Math.round(fontSize / 6))}; stroke-opacity:0.45;">
+           ${escapeXml(contact)}
+         </text>
+       </svg>`
+    );
+    layers.push({ input: svg, left: 0, top: 0 });
+  }
+
+  if (!layers.length) return buffer;
+  return sharp(buffer).composite(layers).jpeg({ quality: 92 }).toBuffer();
+}
+
+app.post('/correct', async (req, res) => {
+  const started = Date.now();
+  try {
+    const {
+      original_url, original_b64,
+      rendered_url, rendered_b64,
+      target_hex, target_lrv,
+      brand_logo_url, brand_contact,
+      options,
+    } = req.body || {};
+
+    if (!target_hex) return res.status(400).json({ ok: false, reason: 'target_hex required' });
+
+    const [origBuf, rendBuf] = await Promise.all([
+      resolveImage(original_url, original_b64, 'original'),
+      resolveImage(rendered_url, rendered_b64, 'rendered'),
+    ]);
+
+    // The original photo defines the output dimensions. The model returns
+    // whatever size it likes, and a corrected image that does not line up with
+    // the source is useless for a before/after.
+    const orig = await sharp(origBuf).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { width, height } = orig.info;
+
+    const rend = await sharp(rendBuf)
+      .resize(width, height, { fit: 'fill' })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const { buffer: corrected, stats } = correct(
+      orig.data, rend.data, width, height, target_hex, target_lrv, options || {}
+    );
+
+    const clean = await sharp(corrected, { raw: { width, height, channels: 3 } })
+      .jpeg({ quality: 92 })
+      .toBuffer();
+
+    const branded = (brand_logo_url || brand_contact)
+      ? await brand(clean, width, height, brand_logo_url, brand_contact)
+      : clean;
+
+    res.json({
+      ok: true,
+      width,
+      height,
+      ms: Date.now() - started,
+      stats,
+      render_b64: clean.toString('base64'),
+      branded_b64: branded.toString('base64'),
+    });
+  } catch (e) {
+    // Always answer. A thrown error with no body is the failure mode that hid
+    // two separate outages on this project - n8n cannot route what it cannot see.
+    console.error('correct failed:', e);
+    res.status(500).json({ ok: false, reason: e.message || String(e), ms: Date.now() - started });
+  }
+});
+
+app.listen(PORT, '::', () => console.log(`paintrz-image listening on ${PORT}`));
