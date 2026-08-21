@@ -11,7 +11,10 @@
       "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-2600, -720]
+      "position": [
+        -2600,
+        -720
+      ]
     },
     {
       "parameters": {
@@ -23,21 +26,28 @@
       "name": "CORS note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-2600, -230]
+      "position": [
+        -2600,
+        -230
+      ]
     },
-
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "paintrz-guest-info",
         "responseMode": "responseNode",
-        "options": { "allowedOrigins": "*" }
+        "options": {
+          "allowedOrigins": "*"
+        }
       },
       "id": "guest_info_webhook",
       "name": "Guest Info Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-2100, -640]
+      "position": [
+        -2100,
+        -640
+      ]
     },
     {
       "parameters": {
@@ -54,9 +64,15 @@
       "name": "Info Link Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1880, -640],
+      "position": [
+        -1880,
+        -640
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -67,18 +83,28 @@
       "name": "Info Normalize",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1660, -640]
+      "position": [
+        -1660,
+        -640
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "info_valid",
               "leftValue": "={{ $json.valid }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -89,7 +115,10 @@
       "name": "Info Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [-1440, -640]
+      "position": [
+        -1440,
+        -640
+      ]
     },
     {
       "parameters": {
@@ -102,9 +131,15 @@
       "name": "Info Owner Profile",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1220, -700],
+      "position": [
+        -1220,
+        -700
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -115,49 +150,76 @@
       "name": "Info Build Reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1000, -700]
+      "position": [
+        -1000,
+        -700
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ $json }}",
         "options": {
-          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
         }
       },
       "id": "info_respond_ok",
       "name": "Info Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [-780, -700]
+      "position": [
+        -780,
+        -700
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { \"valid\": false, \"reason\": $json.reason || \"not_found\" } }}",
         "options": {
-          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
         }
       },
       "id": "info_respond_invalid",
       "name": "Info Respond Invalid",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [-1220, -560]
+      "position": [
+        -1220,
+        -560
+      ]
     },
-
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "paintrz-guest-render",
         "responseMode": "responseNode",
-        "options": { "allowedOrigins": "*" }
+        "options": {
+          "allowedOrigins": "*"
+        }
       },
       "id": "guest_render_webhook",
       "name": "Guest Render Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-2100, -180]
+      "position": [
+        -2100,
+        -180
+      ]
     },
     {
       "parameters": {
@@ -174,9 +236,15 @@
       "name": "Render Link Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1880, -180],
+      "position": [
+        -1880,
+        -180
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -187,18 +255,28 @@
       "name": "Render Normalize",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1660, -180]
+      "position": [
+        -1660,
+        -180
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "render_valid",
               "leftValue": "={{ $json.valid }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -209,7 +287,10 @@
       "name": "Render Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [-1440, -180]
+      "position": [
+        -1440,
+        -180
+      ]
     },
     {
       "parameters": {
@@ -217,14 +298,24 @@
         "responseBody": "={{ { \"ok\": false, \"reason\": $json.reason || \"not_found\" } }}",
         "options": {
           "responseCode": 403,
-          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
         }
       },
       "id": "render_respond_denied",
       "name": "Render Respond Denied",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [-1220, -60]
+      "position": [
+        -1220,
+        -60
+      ]
     },
     {
       "parameters": {
@@ -237,9 +328,15 @@
       "name": "Render Owner Profile",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1220, -260],
+      "position": [
+        -1220,
+        -260
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -250,7 +347,10 @@
       "name": "Render Prepare Photo",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1000, -260]
+      "position": [
+        -1000,
+        -260
+      ]
     },
     {
       "parameters": {
@@ -261,8 +361,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "image/jpeg" },
-            { "name": "x-upsert", "value": "true" }
+            {
+              "name": "Content-Type",
+              "value": "image/jpeg"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
           ]
         },
         "sendBody": true,
@@ -274,9 +380,15 @@
       "name": "Render Upload Photo",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-780, -260],
+      "position": [
+        -780,
+        -260
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -287,7 +399,12 @@
         "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [ { "name": "Prefer", "value": "return=representation" } ]
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
         },
         "sendBody": true,
         "specifyBody": "json",
@@ -298,9 +415,15 @@
       "name": "Render Insert Row",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-560, -260],
+      "position": [
+        -560,
+        -260
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -311,21 +434,34 @@
       "name": "Render Row Ready",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-340, -260]
+      "position": [
+        -340,
+        -260
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { \"ok\": true, \"render_id\": $json.render_id } }}",
         "options": {
-          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
         }
       },
       "id": "render_respond_accepted",
       "name": "Render Respond Accepted",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [-120, -260]
+      "position": [
+        -120,
+        -260
+      ]
     },
     {
       "parameters": {
@@ -334,25 +470,37 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { \"render_id\": $('Render Row Ready').item.json.render_id, \"user_id\": $('Render Prepare Photo').item.json.owner_user_id, \"photo_url\": $('Render Prepare Photo').item.json.public_url, \"color_hex\": $('Guest Render Webhook').item.json.body.color_hex, \"color_name\": $('Guest Render Webhook').item.json.body.color_name, \"colors\": $('Guest Render Webhook').item.json.body.colors, \"surface\": $('Guest Render Webhook').item.json.body.surface, \"prompt\": $('Guest Render Webhook').item.json.body.prompt, \"brand_logo_url\": $('Render Prepare Photo').item.json.brand_logo_url, \"brand_contact\": $('Render Prepare Photo').item.json.brand_contact } }}",
-        "options": { "timeout": 180000 }
+        "options": {
+          "timeout": 180000
+        }
       },
       "id": "render_call_pipeline",
       "name": "Render Call Pipeline",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [100, -260],
+      "position": [
+        100,
+        -260
+      ],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
           "conditions": [
             {
               "id": "pipeline_ok",
               "leftValue": "={{ $json.ok }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -363,7 +511,10 @@
       "name": "Render Succeeded?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [320, -260]
+      "position": [
+        320,
+        -260
+      ]
     },
     {
       "parameters": {
@@ -380,9 +531,15 @@
       "name": "Render Consume",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [540, -300],
+      "position": [
+        540,
+        -300
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
       }
     },
     {
@@ -395,21 +552,28 @@
       "name": "Consume note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [520, -60]
+      "position": [
+        520,
+        -60
+      ]
     },
-
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "paintrz-guest-status",
         "responseMode": "responseNode",
-        "options": { "allowedOrigins": "*" }
+        "options": {
+          "allowedOrigins": "*"
+        }
       },
       "id": "guest_status_webhook",
       "name": "Guest Status Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-2100, 300]
+      "position": [
+        -2100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -422,20 +586,31 @@
       "name": "Status Get Link",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1880, 300],
+      "position": [
+        -1880,
+        300
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
-      }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Looked up by token rather than through guest_link_status, so a render that\n// finishes just after the two hours are up can still be collected. Expiry\n// stops new renders; it should not strand one already paid for.\nconst r = $input.first().json;\nconst row = Array.isArray(r) ? (r[0] || null) : r;\nif (!row || !row.id) throw new Error('unknown link');\nreturn [{ json: {\n  link_id: row.id,\n  renders_left: Math.max(0, (row.render_cap || 0) - (row.renders_used || 0))\n} }];"
+        "jsCode": "// Looked up by token rather than through guest_link_status, so a render that\n// finishes just after the two hours are up can still be collected. Expiry\n// stops new renders; it should not strand one already paid for.\n//\n// This used to throw on an unknown token. A throw here kills the execution\n// before the Respond node, so the guest got an empty 200 and the page had\n// nothing to show - the endpoint failed silently rather than saying \"expired\".\nconst r = $input.first().json;\nconst row = Array.isArray(r) ? (r[0] || null) : r;\nconst ok = !!(row && row.id);\nreturn [{ json: {\n  link_valid: ok,\n  link_id: ok ? row.id : null,\n  renders_left: ok ? Math.max(0, (row.render_cap || 0) - (row.renders_used || 0)) : 0\n} }];"
       },
       "id": "status_normalize_link",
       "name": "Status Normalize Link",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1660, 300]
+      "position": [
+        -1660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -448,78 +623,329 @@
       "name": "Status Get Render",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-1440, 300],
+      "position": [
+        -1440,
+        300
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "8BZNKwDvrkAm9TKo", "name": "supabase new api 4" }
-      }
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Filtering on guest_link_id as well as id is the ownership check: a token can\n// only ever read back renders it produced. Without it, any live token could\n// poll any render id on the platform.\nconst r = $input.first().json;\nconst row = Array.isArray(r) ? (r[0] || null) : r;\nconst link = $('Status Normalize Link').first().json;\nif (!row || !row.status) return [{ json: { status: 'not_found' } }];\nreturn [{ json: {\n  status: row.status,\n  rendered_photo_url: row.rendered_photo_url || null,\n  branded_photo_url: row.branded_photo_url || null,\n  renders_left: link.renders_left\n} }];"
+        "jsCode": "// Filtering on guest_link_id as well as id is the ownership check: a token can\n// only ever read back renders it produced. Without it, any live token could\n// poll any render id on the platform.\n//\n// Every read below is null-safe on purpose. This node is the last one before\n// Respond, so anything that throws here becomes an empty 200 with no\n// explanation - the exact failure this endpoint used to have.\nconst link = $('Status Normalize Link').first().json || {};\n\nif (!link.link_valid) {\n  return [{ json: { status: 'invalid_link', renders_left: 0 } }];\n}\n\nconst items = $input.all();\nconst first = items.length ? items[0].json : null;\nconst row = Array.isArray(first) ? (first[0] || null) : first;\n\nif (!row || !row.status) {\n  return [{ json: { status: 'not_found', renders_left: link.renders_left } }];\n}\n\nreturn [{ json: {\n  status: row.status,\n  rendered_photo_url: row.rendered_photo_url || null,\n  branded_photo_url: row.branded_photo_url || null,\n  renders_left: link.renders_left\n} }];"
       },
       "id": "status_build_reply",
       "name": "Status Build Reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1220, 300]
+      "position": [
+        -1220,
+        300
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ $json }}",
         "options": {
-          "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] }
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
         }
       },
       "id": "status_respond",
       "name": "Status Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [-1000, 300]
+      "position": [
+        -1000,
+        300
+      ]
     }
   ],
   "connections": {
-    "Guest Info Webhook": { "main": [ [ { "node": "Info Link Status", "type": "main", "index": 0 } ] ] },
-    "Info Link Status": { "main": [ [ { "node": "Info Normalize", "type": "main", "index": 0 } ] ] },
-    "Info Normalize": { "main": [ [ { "node": "Info Valid?", "type": "main", "index": 0 } ] ] },
+    "Guest Info Webhook": {
+      "main": [
+        [
+          {
+            "node": "Info Link Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Info Link Status": {
+      "main": [
+        [
+          {
+            "node": "Info Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Info Normalize": {
+      "main": [
+        [
+          {
+            "node": "Info Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Info Valid?": {
       "main": [
-        [ { "node": "Info Owner Profile", "type": "main", "index": 0 } ],
-        [ { "node": "Info Respond Invalid", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Info Owner Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Info Respond Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Info Owner Profile": { "main": [ [ { "node": "Info Build Reply", "type": "main", "index": 0 } ] ] },
-    "Info Build Reply": { "main": [ [ { "node": "Info Respond OK", "type": "main", "index": 0 } ] ] },
-
-    "Guest Render Webhook": { "main": [ [ { "node": "Render Link Status", "type": "main", "index": 0 } ] ] },
-    "Render Link Status": { "main": [ [ { "node": "Render Normalize", "type": "main", "index": 0 } ] ] },
-    "Render Normalize": { "main": [ [ { "node": "Render Valid?", "type": "main", "index": 0 } ] ] },
+    "Info Owner Profile": {
+      "main": [
+        [
+          {
+            "node": "Info Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Info Build Reply": {
+      "main": [
+        [
+          {
+            "node": "Info Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guest Render Webhook": {
+      "main": [
+        [
+          {
+            "node": "Render Link Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Link Status": {
+      "main": [
+        [
+          {
+            "node": "Render Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Normalize": {
+      "main": [
+        [
+          {
+            "node": "Render Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Render Valid?": {
       "main": [
-        [ { "node": "Render Owner Profile", "type": "main", "index": 0 } ],
-        [ { "node": "Render Respond Denied", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Render Owner Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Render Respond Denied",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Render Owner Profile": { "main": [ [ { "node": "Render Prepare Photo", "type": "main", "index": 0 } ] ] },
-    "Render Prepare Photo": { "main": [ [ { "node": "Render Upload Photo", "type": "main", "index": 0 } ] ] },
-    "Render Upload Photo": { "main": [ [ { "node": "Render Insert Row", "type": "main", "index": 0 } ] ] },
-    "Render Insert Row": { "main": [ [ { "node": "Render Row Ready", "type": "main", "index": 0 } ] ] },
-    "Render Row Ready": { "main": [ [ { "node": "Render Respond Accepted", "type": "main", "index": 0 } ] ] },
-    "Render Respond Accepted": { "main": [ [ { "node": "Render Call Pipeline", "type": "main", "index": 0 } ] ] },
-    "Render Call Pipeline": { "main": [ [ { "node": "Render Succeeded?", "type": "main", "index": 0 } ] ] },
+    "Render Owner Profile": {
+      "main": [
+        [
+          {
+            "node": "Render Prepare Photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Prepare Photo": {
+      "main": [
+        [
+          {
+            "node": "Render Upload Photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Upload Photo": {
+      "main": [
+        [
+          {
+            "node": "Render Insert Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Insert Row": {
+      "main": [
+        [
+          {
+            "node": "Render Row Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Row Ready": {
+      "main": [
+        [
+          {
+            "node": "Render Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Respond Accepted": {
+      "main": [
+        [
+          {
+            "node": "Render Call Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Call Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Render Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Render Succeeded?": {
       "main": [
-        [ { "node": "Render Consume", "type": "main", "index": 0 } ],
+        [
+          {
+            "node": "Render Consume",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
-
-    "Guest Status Webhook": { "main": [ [ { "node": "Status Get Link", "type": "main", "index": 0 } ] ] },
-    "Status Get Link": { "main": [ [ { "node": "Status Normalize Link", "type": "main", "index": 0 } ] ] },
-    "Status Normalize Link": { "main": [ [ { "node": "Status Get Render", "type": "main", "index": 0 } ] ] },
-    "Status Get Render": { "main": [ [ { "node": "Status Build Reply", "type": "main", "index": 0 } ] ] },
-    "Status Build Reply": { "main": [ [ { "node": "Status Respond", "type": "main", "index": 0 } ] ] }
+    "Guest Status Webhook": {
+      "main": [
+        [
+          {
+            "node": "Status Get Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Get Link": {
+      "main": [
+        [
+          {
+            "node": "Status Normalize Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Normalize Link": {
+      "main": [
+        [
+          {
+            "node": "Status Get Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Get Render": {
+      "main": [
+        [
+          {
+            "node": "Status Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Build Reply": {
+      "main": [
+        [
+          {
+            "node": "Status Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }
