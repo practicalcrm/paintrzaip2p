@@ -8,6 +8,8 @@
 
 const express = require('express');
 const sharp = require('sharp');
+const dns = require('dns').promises;
+const net = require('net');
 const { correct } = require('./color');
 
 const app = express();
@@ -30,7 +32,39 @@ app.use((req, res, next) => {
   return res.status(401).json({ ok: false, reason: 'unauthorized' });
 });
 
+// brand_logo_url is supplied by the contractor, so this service will fetch
+// whatever any customer puts in their branding settings. Without a guard that
+// makes it a request forwarder sitting inside the private network: point it at
+// another service's internal address, or at cloud metadata, and it returns the
+// bytes. Resolve first, then refuse anything that is not a public address.
+function isPrivateIp(ip) {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 10 || a === 127 || a === 0 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254) ||
+      (a === 100 && b >= 64 && b <= 127);
+  }
+  const v = ip.toLowerCase();
+  return v === '::' || v === '::1' || v.startsWith('fe80') ||
+    v.startsWith('fc') || v.startsWith('fd') || v.startsWith('::ffff:');
+}
+
+async function assertFetchable(raw) {
+  let u;
+  try { u = new URL(raw); } catch { throw new Error('malformed url'); }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('unsupported scheme');
+  const addrs = await dns.lookup(u.hostname, { all: true });
+  if (!addrs.length) throw new Error('host did not resolve');
+  for (const a of addrs) {
+    if (isPrivateIp(a.address)) throw new Error('refusing to fetch a private address');
+  }
+  return u;
+}
+
 async function fetchBuffer(url) {
+  await assertFetchable(url);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
