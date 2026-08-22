@@ -87,6 +87,13 @@ const DEFAULTS = {
   densityRadius: 6,
   minDensity: 0.65,
 
+  // Flag masking. How far a pixel must lean along the flag colour's hue to
+  // count as flagged. Room surfaces lean the OTHER way - beige, wood and brass
+  // all project negative onto magenta - so the honest threshold is near zero
+  // and this is mostly headroom. Raised per photo when the room already holds
+  // some of the flag's hue.
+  flagProjection: 30,
+
   // Below this much difference between the region's mean lightness and the
   // target's, leave lightness alone entirely and behave exactly as the original
   // spec did. The corrective is for the cases the model could not reach, not a
@@ -224,13 +231,25 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
     return out2;
   };
 
-  let region = build(o.threshold);
-  let thresholdUsed = o.threshold;
-  if (region.count / px < o.fallbackMinFraction) {
-    const relaxed = build(o.fallbackThreshold);
-    if (relaxed.count > region.count) {
-      region = relaxed;
-      thresholdUsed = o.fallbackThreshold;
+  // A mask supplied by the caller comes from the flag render, which answers
+  // "which surface" far better than anything derivable from these two images.
+  // When there is one, the tests above are not consulted at all.
+  let region;
+  let thresholdUsed;
+  if (opts.mask) {
+    let c = 0;
+    for (let i = 0; i < px; i++) if (opts.mask[i]) c++;
+    region = { mask: opts.mask, count: c, changed: 0, plausible: 0 };
+    thresholdUsed = 'flag';
+  } else {
+    region = build(o.threshold);
+    thresholdUsed = o.threshold;
+    if (region.count / px < o.fallbackMinFraction) {
+      const relaxed = build(o.fallbackThreshold);
+      if (relaxed.count > region.count) {
+        region = relaxed;
+        thresholdUsed = o.fallbackThreshold;
+      }
     }
   }
 
@@ -334,4 +353,95 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
   };
 }
 
-module.exports = { correct, hexToRgb, rgbToLab, labToRgb, lrvToL, DEFAULTS };
+// ---------- flag-colour masking ----------
+//
+// The pipeline renders the photo twice from one seed: once in the paint colour
+// the customer asked for, and once in a colour that cannot occur in a room.
+// The second render is not for looking at. It is a stencil.
+//
+// This exists because masking on the real paint colour cannot work for the
+// colours this market actually sells. Urbane Bronze sits at chroma 4.1, which
+// makes it indistinguishable from half a warm kitchen; #FF00FF is
+// indistinguishable from nothing at all. Naval only ever worked because it was
+// cool and the room was warm.
+
+// Extreme, and none of them a colour a kitchen contains. Red is deliberately
+// absent - it is too close to wood, brick and terracotta.
+const FLAG_CANDIDATES = [
+  { hex: '#FF00FF', name: 'magenta' },
+  { hex: '#00FF00', name: 'green' },
+  { hex: '#00FFFF', name: 'cyan' },
+  { hex: '#0000FF', name: 'blue' },
+];
+
+// Unit vector along a colour's hue in the LAB a/b plane.
+function hueUnit(hex) {
+  const [, a, b] = rgbToLab(hexToRgb(hex));
+  const mag = Math.hypot(a, b) || 1;
+  return { ua: a / mag, ub: b / mag };
+}
+
+/**
+ * Choose a flag colour this photo cannot be confused with.
+ *
+ * A fixed flag is a trap: a kitchen with pink peonies, a red stand mixer or
+ * magenta artwork would hand back those pixels as cabinet. So score every
+ * candidate against the photo and take the hue the room has least of.
+ *
+ * Returns the winner plus the headroom it won by, which becomes the mask
+ * threshold - measured from this photo rather than assumed.
+ */
+function pickFlag(orig, width, height, opts = {}) {
+  const o = { ...DEFAULTS, ...opts };
+  const px = width * height;
+
+  // Every 7th pixel. This decides one number and does not need all 1.5M.
+  const step = Math.max(1, Math.floor(px / 200000));
+
+  const scored = FLAG_CANDIDATES.map((c) => {
+    const { ua, ub } = hueUnit(c.hex);
+    let worst = -Infinity;
+    for (let i = 0, p = 0; i < px; i += step, p = i * 3) {
+      const [, a, b] = rgbToLab([orig[p], orig[p + 1], orig[p + 2]]);
+      const proj = a * ua + b * ub;
+      if (proj > worst) worst = proj;
+    }
+    return { ...c, roomMax: +worst.toFixed(1) };
+  });
+
+  scored.sort((x, y) => x.roomMax - y.roomMax);
+  const winner = scored[0];
+
+  // Sit above whatever the room already has, but never below the floor - a
+  // room full of foliage should not drag the threshold down to nothing.
+  const threshold = Math.max(o.flagProjection, winner.roomMax + 20);
+
+  return { flagHex: winner.hex, flagName: winner.name, threshold, scored };
+}
+
+/**
+ * Mask the flagged surface out of a flag render.
+ *
+ * Projection along the flag's hue rather than distance to the flag's colour,
+ * because the model renders a flat instruction with shading: cabinet faces in
+ * shadow come back darker and less saturated, which moves them a long way in
+ * distance while leaving the hue exactly where it was.
+ */
+function flagMask(flag, width, height, flagHex, threshold, opts = {}) {
+  const o = { ...DEFAULTS, ...opts };
+  const px = width * height;
+  const { ua, ub } = hueUnit(flagHex);
+  const cut = threshold != null ? threshold : o.flagProjection;
+
+  const mask = new Uint8Array(px);
+  let count = 0, maxProj = -Infinity;
+  for (let i = 0, p = 0; i < px; i++, p += 3) {
+    const [, a, b] = rgbToLab([flag[p], flag[p + 1], flag[p + 2]]);
+    const proj = a * ua + b * ub;
+    if (proj > maxProj) maxProj = proj;
+    if (proj >= cut) { mask[i] = 1; count++; }
+  }
+  return { mask, count, threshold: cut, maxProjection: +maxProj.toFixed(1) };
+}
+
+module.exports = { correct, flagMask, pickFlag, hexToRgb, rgbToLab, labToRgb, lrvToL, DEFAULTS, FLAG_CANDIDATES };

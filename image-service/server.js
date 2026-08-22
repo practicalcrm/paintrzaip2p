@@ -10,7 +10,7 @@ const express = require('express');
 const sharp = require('sharp');
 const dns = require('dns').promises;
 const net = require('net');
-const { correct } = require('./color');
+const { correct, flagMask, pickFlag } = require('./color');
 
 const app = express();
 
@@ -167,12 +167,33 @@ async function brand(buffer, width, height, logoUrl, contact) {
   return sharp(buffer).composite(layers).jpeg({ quality: 92 }).toBuffer();
 }
 
+// Choose a flag colour for a photo.
+//
+// Called before either render, because the flag has to be a colour THIS room
+// does not contain. A fixed flag would hand back the peonies, the red mixer or
+// the magenta artwork as cabinet.
+app.post('/flag', async (req, res) => {
+  const started = Date.now();
+  try {
+    const { original_url, original_b64 } = req.body || {};
+    const buf = await resolveImage(original_url, original_b64, 'original');
+    const orig = await decode(buf, 'original');
+    const { width, height } = orig.info;
+    const pick = pickFlag(orig.data, width, height);
+    res.json({ ok: true, ms: Date.now() - started, width, height, ...pick });
+  } catch (e) {
+    console.error('flag failed:', e);
+    res.status(500).json({ ok: false, reason: e.message || String(e), ms: Date.now() - started });
+  }
+});
+
 app.post('/correct', async (req, res) => {
   const started = Date.now();
   try {
     const {
       original_url, original_b64,
       rendered_url, rendered_b64,
+      flag_url, flag_b64, flag_hex, flag_threshold,
       target_hex, target_lrv,
       brand_logo_url, brand_contact,
       options,
@@ -208,8 +229,31 @@ app.post('/correct', async (req, res) => {
       throw new Error(`rendered: ${e.message} | ${d.bytes} bytes, starts ${d.hex} (${d.ascii})${d.body ? ' | body: ' + d.body : ''}`);
     }
 
+    // The flag render is a stencil, not an image anyone sees. It is resized
+    // onto the same grid as everything else so its mask indexes the render
+    // pixel for pixel; both come from one seed, so they line up.
+    let maskInfo = null;
+    let maskArray = null;
+    if ((flag_url || flag_b64) && flag_hex) {
+      const flagBuf = await resolveImage(flag_url, flag_b64, 'flag');
+      let flagRaw;
+      try {
+        flagRaw = await sharp(flagBuf)
+          .resize(width, height, { fit: 'cover', position: 'centre' })
+          .removeAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+      } catch (e) {
+        const d = describe(flagBuf, 'flag');
+        throw new Error(`flag: ${e.message} | ${d.bytes} bytes, starts ${d.hex} (${d.ascii})${d.body ? ' | body: ' + d.body : ''}`);
+      }
+      maskInfo = flagMask(flagRaw.data, width, height, flag_hex, flag_threshold, options || {});
+      maskArray = maskInfo.mask;
+    }
+
     const { buffer: corrected, stats } = correct(
-      orig.data, rend.data, width, height, target_hex, target_lrv, options || {}
+      orig.data, rend.data, width, height, target_hex, target_lrv,
+      { ...(options || {}), ...(maskArray ? { mask: maskArray } : {}) }
     );
 
     const clean = await sharp(corrected, { raw: { width, height, channels: 3 } })
@@ -226,6 +270,11 @@ app.post('/correct', async (req, res) => {
       height,
       ms: Date.now() - started,
       stats,
+      flag: maskInfo
+        ? { hex: flag_hex, threshold: maskInfo.threshold,
+            maxProjection: maskInfo.maxProjection,
+            fraction: +(maskInfo.count / (width * height)).toFixed(4) }
+        : null,
       render_b64: clean.toString('base64'),
       branded_b64: branded.toString('base64'),
     });
