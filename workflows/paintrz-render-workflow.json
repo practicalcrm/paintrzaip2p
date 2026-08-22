@@ -295,14 +295,35 @@
     },
     {
       "parameters": {
-        "jsCode": "// Kontext is an instruction-following editor, not img2img: it has no strength\n// or guidance dial to soften the edit with. What holds the rest of the photo\n// still is the \"keep everything else identical\" wording Build Prompt puts in\n// the instruction, so that sentence is load-bearing here.\n//\n// Dezgo is gone. Under API v2 its image2image endpoint answered every request\n// with a 315-byte billing receipt - {\"tx\":{\"_id\"... - at HTTP 2xx, in both\n// multipart and JSON+base64 form, and never once with image bytes.\nconst build = $('Build Prompt').first().json;\n\n// Binary is stored in filesystem mode here, so `binary.original.data` is a\n// REFERENCE, not base64. The helper resolves it to real bytes.\nconst img = await this.helpers.getBinaryDataBuffer(0, 'original');\n\n// Kontext ignores the source shape and answers at its own default - it handed\n// back 1024x1024 for a 1244x1265 photo - so the aspect ratio has to be asked\n// for explicitly. Without it the image service has to squeeze the result back\n// onto the original's dimensions, which distorts the whole room.\n//\n// The parameter is real but fussy: \"4:3\" is honoured, \"983:1000\" is silently\n// ignored. So snap to a known-good ratio rather than computing an exact one.\nfunction dimensions(buf) {\n  // PNG: IHDR carries width and height as big-endian uint32 at bytes 16 and 20.\n  if (buf.length > 24 && buf[0] === 0x89 && buf[1] === 0x50) {\n    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };\n  }\n  // JPEG: walk the marker chain to a start-of-frame and read its dimensions.\n  if (buf.length > 4 && buf[0] === 0xFF && buf[1] === 0xD8) {\n    let i = 2;\n    while (i < buf.length - 9) {\n      if (buf[i] !== 0xFF) { i++; continue; }\n      const m = buf[i + 1];\n      // SOF0-SOF15 carry the size; C4, C8 and CC are other markers in range.\n      if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) {\n        return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };\n      }\n      i += 2 + buf.readUInt16BE(i + 2);\n    }\n  }\n  return null;\n}\n\n// Every common camera and phone shape, and all inside the 3:7-7:3 window BFL\n// accepts. Snapping to the nearest costs a sliver of crop in the image\n// service and cannot produce a string the API quietly drops on the floor.\nconst RATIOS = [\n  ['1:1', 1], ['4:3', 4 / 3], ['3:4', 3 / 4], ['3:2', 3 / 2], ['2:3', 2 / 3],\n  ['16:9', 16 / 9], ['9:16', 9 / 16], ['5:4', 5 / 4], ['4:5', 4 / 5],\n  ['7:5', 7 / 5], ['5:7', 5 / 7], ['2:1', 2], ['1:2', 1 / 2],\n];\n\nconst dim = dimensions(img);\nlet aspect = null;\nif (dim && dim.w && dim.h) {\n  const want = dim.w / dim.h;\n  let best = null;\n  for (const [name, r] of RATIOS) {\n    // Compare in log space so 2:1 and 1:2 are judged as equally far out.\n    const err = Math.abs(Math.log(r / want));\n    if (!best || err < best.err) best = { name, err };\n  }\n  aspect = best.name;\n}\n\nconst payload = {\n  prompt: build.render_prompt,\n  input_image: img.toString('base64'),\n  output_format: 'jpeg',\n  // 2 is the highest BFL accepts once an input image is present.\n  safety_tolerance: 2,\n  // Upsampling rewrites the instruction, which would let the model\n  // reinterpret the colour names - exactly what the LAB pass downstream\n  // exists to pin down.\n  prompt_upsampling: false\n};\n\n// Omitted rather than guessed if the header could not be read: Kontext's own\n// default beats a wrong shape.\nif (aspect) payload.aspect_ratio = aspect;\n\nreturn [{ json: payload, pairedItem: 0 }];"
+        "method": "POST",
+        "url": "http://paintrzaip2p.railway.internal:8080/flag",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"original_url\": $('Build Prompt').item.json.init_image_url } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "pick_flag",
+      "name": "Pick Flag Colour",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        -80
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Two renders, one seed.\n//\n// The first is the picture. The second is a stencil: the same photo with the\n// cabinets in a colour no kitchen contains, rendered only so the colour pass\n// knows exactly which pixels are the surface. Masking on the real paint colour\n// cannot do that job - Urbane Bronze sits at chroma 4.1 and is\n// indistinguishable from half a warm kitchen, which came back as grey walls\n// and speckled countertops twice.\n//\n// They share a seed because a mask taken from one render is only valid on the\n// other if the two agree about where the cabinets are. Measured on a\n// seed-locked pair, the flag mask splits the real render into mean L 22.3\n// inside and 66.6 outside.\nconst build = $('Build Prompt').first().json;\nconst flag = $('Pick Flag Colour').first().json;\nif (!flag || flag.ok !== true || !flag.flagHex) {\n  throw new Error('flag picker: ' + ((flag && flag.reason) || 'no response'));\n}\n\n// Binary is stored in filesystem mode here, so `binary.original.data` is a\n// REFERENCE, not base64. The helper resolves it to real bytes.\nconst img = await this.helpers.getBinaryDataBuffer(0, 'original');\n\n// Kontext ignores the source shape and answers at its own default - it handed\n// back 1024x1024 for a 1244x1265 photo - so the aspect ratio has to be asked\n// for explicitly. The parameter is real but fussy: \"4:3\" is honoured,\n// \"983:1000\" is silently ignored. Snap to a known-good ratio rather than\n// computing an exact one.\nfunction dimensions(buf) {\n  // PNG: IHDR carries width and height as big-endian uint32 at bytes 16 and 20.\n  if (buf.length > 24 && buf[0] === 0x89 && buf[1] === 0x50) {\n    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };\n  }\n  // JPEG: walk the marker chain to a start-of-frame and read its dimensions.\n  if (buf.length > 4 && buf[0] === 0xFF && buf[1] === 0xD8) {\n    let i = 2;\n    while (i < buf.length - 9) {\n      if (buf[i] !== 0xFF) { i++; continue; }\n      const m = buf[i + 1];\n      // SOF0-SOF15 carry the size; C4, C8 and CC are other markers in range.\n      if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) {\n        return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };\n      }\n      i += 2 + buf.readUInt16BE(i + 2);\n    }\n  }\n  return null;\n}\n\nconst RATIOS = [\n  ['1:1', 1], ['4:3', 4 / 3], ['3:4', 3 / 4], ['3:2', 3 / 2], ['2:3', 2 / 3],\n  ['16:9', 16 / 9], ['9:16', 9 / 16], ['5:4', 5 / 4], ['4:5', 4 / 5],\n  ['7:5', 7 / 5], ['5:7', 5 / 7], ['2:1', 2], ['1:2', 1 / 2],\n];\n\nconst dim = dimensions(img);\nlet aspect = null;\nif (dim && dim.w && dim.h) {\n  const want = dim.w / dim.h;\n  let best = null;\n  for (const [name, r] of RATIOS) {\n    // Compare in log space so 2:1 and 1:2 are judged as equally far out.\n    const err = Math.abs(Math.log(r / want));\n    if (!best || err < best.err) best = { name, err };\n  }\n  aspect = best.name;\n}\n\n// Derived from the render id rather than random, so re-running a render that\n// went wrong reproduces it exactly instead of rolling a new scene.\nlet seed = 0;\nfor (const ch of String(build.render_id || 'paintrz')) {\n  seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;\n}\nseed = seed % 2147483647;\n\nconst base = {\n  input_image: img.toString('base64'),\n  output_format: 'jpeg',\n  // 2 is the highest BFL accepts once an input image is present.\n  safety_tolerance: 2,\n  // Upsampling rewrites the instruction, which would let the model\n  // reinterpret the colour names - exactly what the LAB pass exists to pin\n  // down - and would break the two prompts apart from each other.\n  prompt_upsampling: false,\n  seed\n};\nif (aspect) base.aspect_ratio = aspect;\n\n// Same sentence, same seed, one word different. The closer these two prompts\n// are, the better the two renders agree about where the cabinets are.\nconst flagPrompt = 'Repaint the ' + build.surface + ' in flat pure ' + flag.flagName +\n  ', hex ' + flag.flagHex + ', fully saturated, like a solid colour mask. ' +\n  'Paint every part of the ' + build.surface + ' this exact colour. ' +\n  'Keep everything else in the photo completely unchanged - same walls, same floor, ' +\n  'same countertops, same appliances, same lighting.';\n\nreturn [\n  { json: { ...base, prompt: build.render_prompt }, pairedItem: 0 },\n  { json: { ...base, prompt: flagPrompt }, pairedItem: 0 }\n];"
       },
       "id": "e0000001-0000-4000-8000-000000000001",
-      "name": "Build BFL Payload",
+      "name": "Build BFL Payloads",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        60,
+        240,
         -80
       ],
       "onError": "continueErrorOutput"
@@ -325,7 +346,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        240,
+        420,
         -80
       ],
       "onError": "continueErrorOutput",
@@ -346,14 +367,14 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        420,
+        600,
         -80
       ],
       "webhookId": "b7f1c2d4-3a56-4e88-9c10-2f5a7e0d9b31"
     },
     {
       "parameters": {
-        "url": "={{ $('Submit BFL Kontext').first().json.polling_url || ('https://api.bfl.ai/v1/get_result?id=' + $('Submit BFL Kontext').first().json.id) }}",
+        "url": "={{ $json.polling_url }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -365,7 +386,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        600,
+        780,
         -80
       ],
       "onError": "continueErrorOutput",
@@ -378,14 +399,14 @@
     },
     {
       "parameters": {
-        "jsCode": "// BFL is submit-then-poll: the POST returns a job id, and the image only\n// exists once get_result reports \"Ready\". Every way out of this loop is\n// decided here rather than in the IF, so a moderated or errored job fails\n// with its real reason instead of eventually reporting a timeout.\nconst r = $input.first().json || {};\nconst status = r.status || '';\n\n// $runIndex counts this node's own runs inside the execution, which is what\n// lets the cap survive the loop back to Wait - a counter carried in the item\n// would reset. 40 x 3s is about two minutes; Kontext Pro normally lands in ten\n// seconds.\nconst MAX_POLLS = 40;\n\nif (status === 'Ready') {\n  const sample = r.result && (r.result.sample || r.result.url);\n  if (!sample) throw new Error('BFL reported Ready with no result.sample');\n  return [{ json: { ready: true, sample_url: sample, polls: $runIndex + 1 }, pairedItem: 0 }];\n}\n\n// Anything outside this list is terminal - Error, Content Moderated, Request\n// Moderated, Task not found. Looping on those burns the full two minutes and\n// then reports a timeout, which hides the actual cause.\nconst PENDING = ['Pending', 'Queued', 'Processing', 'Request Accepted'];\nif (PENDING.indexOf(status) === -1) {\n  const detail = r.details ? ' - ' + JSON.stringify(r.details) : '';\n  throw new Error('BFL returned status \"' + status + '\"' + detail);\n}\n\nif ($runIndex + 1 >= MAX_POLLS) {\n  throw new Error('BFL still ' + status + ' after ' + MAX_POLLS + ' polls');\n}\n\nreturn [{ json: { ready: false, status, polls: $runIndex + 1 }, pairedItem: 0 }];"
+        "jsCode": "// Two renders are in flight, so this gate is all-or-nothing: the branch only\n// moves on once BOTH are Ready, and otherwise hands the submit records back to\n// the Wait node to poll again.\n//\n// Which render is which is read from the prompt BFL echoes back in\n// result.prompt, not from item order. Order does survive an n8n loop today,\n// but nothing enforces it, and getting this backwards would mask the picture\n// with itself and hand the customer a magenta kitchen.\nconst flagHex = $('Pick Flag Colour').first().json.flagHex;\n\n// $runIndex counts this node's own runs inside the execution, which is what\n// lets the cap survive the loop back to Wait - a counter carried in the item\n// would reset. 40 x 3s is about two minutes; Kontext Pro normally lands in\n// thirty seconds.\nconst MAX_POLLS = 40;\n\nconst items = $input.all().map(i => i.json || {});\nconst PENDING = ['Pending', 'Queued', 'Processing', 'Request Accepted'];\n\nfor (const r of items) {\n  const status = r.status || '';\n  if (status === 'Ready') continue;\n  // Anything outside this list is terminal - Error, Content Moderated,\n  // Request Moderated, Task not found. Looping on those burns two minutes and\n  // then reports a timeout, which hides the actual cause.\n  if (PENDING.indexOf(status) === -1) {\n    const detail = r.details ? ' - ' + JSON.stringify(r.details) : '';\n    throw new Error('BFL returned status \"' + status + '\"' + detail);\n  }\n}\n\nconst ready = items.every(r => r.status === 'Ready');\n\nif (!ready) {\n  if ($runIndex + 1 >= MAX_POLLS) {\n    throw new Error('BFL still working after ' + MAX_POLLS + ' polls');\n  }\n  // Back round with the polling records, not the poll responses.\n  return $('Submit BFL Kontext').all().map((i, n) => ({ json: i.json, pairedItem: n }));\n}\n\nconst out = items.map((r, n) => {\n  const sample = r.result && (r.result.sample || r.result.url);\n  if (!sample) throw new Error('BFL reported Ready with no result.sample');\n  const echoed = (r.result && r.result.prompt) || '';\n  return {\n    json: {\n      ready: true,\n      is_flag: echoed.indexOf(flagHex) !== -1,\n      sample_url: sample,\n      seed: r.result && r.result.seed,\n      polls: $runIndex + 1\n    },\n    pairedItem: n\n  };\n});\n\nif (out.filter(o => o.json.is_flag).length !== 1) {\n  throw new Error('expected exactly one flag render, got ' + out.filter(o => o.json.is_flag).length);\n}\n\nreturn out;"
       },
       "id": "check_bfl_status",
       "name": "Check BFL Status",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        780,
+        960,
         -80
       ],
       "onError": "continueErrorOutput"
@@ -418,20 +439,20 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        960,
+        1140,
         -80
       ]
     },
     {
       "parameters": {
-        "jsCode": "// BFL hands back a signed delivery URL rather than bytes, and the image\n// service already accepts a URL for either image - so the render never becomes\n// an n8n binary at all. That also keeps this path clear of the filesystem\n// binary reference that once handed sharp the literal string \"filesystem-v2\".\n//\n// Those delivery URLs are short-lived, so nothing may sit between here and the\n// service's fetch.\nconst build = $('Build Prompt').first().json;\nconst sampleUrl = $input.first().json.sample_url;\nif (!sampleUrl) throw new Error('no BFL sample url reached Build Correct Payload');\n\n// The original is already a public Supabase URL, so the service fetches it\n// rather than round-tripping several MB of base64 through n8n. On a correction\n// this is the previous UNBRANDED render, which is what corrections build on.\nconst originalUrl = build.init_image_url;\n\nconst primary = Array.isArray(build.colors) && build.colors.length ? build.colors[0] : null;\n\nreturn [{ json: {\n  render_id: build.render_id,\n  original_url: originalUrl,\n  rendered_url: sampleUrl,\n  target_hex: build.target_hex,\n  // LRV is the manufacturer's published lightness and a better target than the\n  // hex, which is only a screen approximation of the chip. The colour proxy\n  // returns it, but app.html does not forward it yet - so this stays null for\n  // now and the service derives lightness from the hex.\n  target_lrv: (primary && primary.lrv != null) ? primary.lrv : null,\n  brand_logo_url: build.brand_logo_url || null,\n  brand_contact: build.brand_contact || null\n}, pairedItem: 0 }];"
+        "jsCode": "// Both renders arrive here: the picture, and the stencil. Neither becomes an\n// n8n binary - BFL hands back signed delivery URLs and the image service\n// fetches them itself. Those URLs are short-lived, so nothing may sit between\n// here and that fetch.\nconst build = $('Build Prompt').first().json;\nconst flag = $('Pick Flag Colour').first().json;\n\nconst items = $input.all().map(i => i.json);\nconst stencil = items.find(i => i.is_flag);\nconst picture = items.find(i => !i.is_flag);\nif (!stencil || !picture) {\n  throw new Error('expected one flag render and one real render, got ' + items.length);\n}\n\n// The original is already a public Supabase URL, so the service fetches it\n// rather than round-tripping several MB of base64 through n8n. On a correction\n// this is the previous UNBRANDED render, which is what corrections build on.\nconst originalUrl = build.init_image_url;\n\nconst primary = Array.isArray(build.colors) && build.colors.length ? build.colors[0] : null;\n\nreturn [{ json: {\n  render_id: build.render_id,\n  original_url: originalUrl,\n  rendered_url: picture.sample_url,\n  // The stencil, and the threshold the picker measured against THIS photo\n  // rather than a constant - a room already holding some of the flag's hue\n  // needs a higher bar.\n  flag_url: stencil.sample_url,\n  flag_hex: flag.flagHex,\n  flag_threshold: flag.threshold,\n  target_hex: build.target_hex,\n  // LRV is the manufacturer's published lightness and a better target than the\n  // hex, which is only a screen approximation of the chip. The colour proxy\n  // returns it, and app.html forwards it on the colours it resolves.\n  target_lrv: (primary && primary.lrv != null) ? primary.lrv : null,\n  brand_logo_url: build.brand_logo_url || null,\n  brand_contact: build.brand_contact || null\n}, pairedItem: 0 }];"
       },
       "id": "c0000001-0000-4000-8000-000000000001",
       "name": "Build Correct Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1160,
+        1340,
         -180
       ],
       "onError": "continueErrorOutput"
@@ -452,7 +473,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1340,
+        1520,
         -180
       ],
       "onError": "continueErrorOutput"
@@ -466,7 +487,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1520,
+        1700,
         -180
       ],
       "onError": "continueErrorOutput"
@@ -500,7 +521,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1700,
+        1880,
         -180
       ],
       "onError": "continueErrorOutput",
@@ -536,7 +557,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1880,
+        2060,
         -180
       ],
       "executeOnce": true,
@@ -559,7 +580,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2060,
+        2240,
         -180
       ]
     },
@@ -588,7 +609,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1160,
+        1340,
         320
       ],
       "onError": "continueRegularOutput",
@@ -628,7 +649,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1340,
+        1520,
         320
       ]
     },
@@ -648,7 +669,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1520,
+        1700,
         240
       ],
       "onError": "continueRegularOutput",
@@ -673,7 +694,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1700,
+        1880,
         320
       ]
     },
@@ -775,7 +796,7 @@
     },
     {
       "parameters": {
-        "content": "## The render is submit-then-poll\n`POST /v1/flux-kontext-pro` returns `{id, polling_url, cost}` — **not** an image. The image exists only once `polling_url` reports `status: Ready`, and then only as a short-lived signed URL at `result.sample`.\n\n`Check BFL Status` owns every exit from this loop: **Ready** leaves it, **Error / Content Moderated / Request Moderated / Task not found** throw with their real reason, and a cap of 40 polls stops it running forever. The cap reads `$runIndex`, which counts that node's own runs — a counter carried in the item would reset on every pass.\n\nThe sample URL goes straight to the image service as `rendered_url`, so the render never becomes an n8n binary. That removes the `filesystem-v2` reference trap from this path entirely.\n\nReplaced Dezgo, which answered every variant tried with a 315-byte billing receipt at HTTP 2xx instead of an image.",
+        "content": "## Two renders, one seed\n\n`POST /v1/flux-kontext-pro` returns `{id, polling_url}` — **not** an image. This fires it twice: once in the colour the customer asked for, and once in a flag colour no kitchen contains.\n\nThe flag render is never shown to anyone. It is a **stencil**, and it exists because masking on the real paint colour cannot work for the colours this market sells — Urbane Bronze sits at chroma 4.1 and is indistinguishable from half a warm kitchen. Two renders came back with grey walls and speckled countertops before this.\n\n**The seed is shared**, derived from `render_id`. A mask taken from one render is only valid on the other if both agree where the cabinets are. Measured on a seed-locked pair: mean L 22.3 inside the mask, 66.6 outside.\n\n**The flag colour is picked per photo** by the image service, not fixed — a room with pink peonies or a red mixer would hand those back as cabinet.\n\n`Check BFL Status` gates on BOTH renders being Ready, and tells them apart by the prompt BFL echoes in `result.prompt` rather than by item order. Getting that backwards would hand the customer a magenta kitchen.",
         "height": 400,
         "width": 480,
         "color": 4
@@ -944,7 +965,7 @@
       "main": [
         [
           {
-            "node": "Build BFL Payload",
+            "node": "Pick Flag Colour",
             "type": "main",
             "index": 0
           }
@@ -1088,24 +1109,6 @@
         ]
       ]
     },
-    "Build BFL Payload": {
-      "main": [
-        [
-          {
-            "node": "Submit BFL Kontext",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Mark Failed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Submit BFL Kontext": {
       "main": [
         [
@@ -1183,6 +1186,42 @@
         [
           {
             "node": "Wait For Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Flag Colour": {
+      "main": [
+        [
+          {
+            "node": "Build BFL Payloads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build BFL Payloads": {
+      "main": [
+        [
+          {
+            "node": "Submit BFL Kontext",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
             "type": "main",
             "index": 0
           }
