@@ -54,21 +54,27 @@ function lrvToL(lrv) {
 
 // ---------- tuning ----------
 const DEFAULTS = {
-  // How far a pixel's colour may sit from the paint, in the LAB a/b plane, and
-  // still count as part of that painted surface. Generous on purpose: the
-  // model's idea of a colour is only ever approximately right, and closing
-  // that gap is the entire reason this pass exists.
-  chromaRadius: 25,
+  // Primary test: how far a pixel must move between the original photo and the
+  // model's output before it counts as repainted.
+  threshold: 28,
 
-  // Used only when the first pass finds almost nothing, which means the model
-  // barely applied the colour at all. Widening once is better than returning a
-  // render with no correction and no explanation.
-  fallbackChromaRadius: 40,
+  // If the primary threshold finds almost nothing, the change was subtle -
+  // cream walls to Snowbound move maybe 10-15 in RGB distance. Without this
+  // pass those renders get no correction at all and the exact-colour promise
+  // silently does not apply. Only used when the first pass looks empty.
+  fallbackThreshold: 12,
   fallbackMinFraction: 0.005,
 
+  // Secondary test: whatever the model put there has to be plausibly this
+  // paint. Deliberately loose. A model renders a colour with far more life in
+  // it than the flat chip has - bronze cabinets land 20-25 away from Urbane
+  // Bronze in a/b - so this is tight enough only to reject a surface the model
+  // changed into something else entirely.
+  chromaRadius: 40,
+
   // A matte painted surface cannot carry a highlight far brighter than the
-  // paint itself. Daylight through a window can, and does. Without this the
-  // mask swallowed the window on the first real render.
+  // paint itself. Daylight through a window can, and the model regenerates the
+  // view through it on every render, so those pixels always read as changed.
   lightnessHeadroom: 45,
 
   // Below this much difference between the region's mean lightness and the
@@ -85,9 +91,7 @@ const DEFAULTS = {
 /**
  * Force the repainted region to the target colour.
  *
- * orig/rend are raw RGB buffers of identical dimensions. orig is read only for
- * diagnostics now - see the note on masking below.
- *
+ * orig/rend are raw RGB buffers of identical dimensions.
  * Returns a new RGB buffer plus stats describing what it decided to do.
  */
 function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
@@ -102,70 +106,67 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
     ? lrvToL(targetLrv)
     : rgbToLab(hexToRgb(targetHex))[0];
 
-  // Where the paint went.
+  // Where the paint went. Two tests, and it needs both.
   //
-  // This used to be "every pixel that differs from the original photo", which
-  // assumes the model edits the photo in place. FLUX.1 Kontext does not - it
-  // regenerates the whole frame, so even untouched walls come back with
-  // different pixels, and the output does not line up with the input at all
-  // unless the aspect ratio matches. On the first real render that mask
-  // selected 62% of the frame and forced the floor, ceiling and countertops to
-  // navy. The photo came back shredded.
+  // The diff against the original answers "did the model touch this pixel",
+  // and it is only meaningful because the workflow now asks Kontext for the
+  // source aspect ratio. Before that it answered a 1244x1265 photo with a
+  // 1024x1024 image, nothing lined up, and this test alone selected 62% of the
+  // frame and forced the floor and ceiling to navy. With the ratio matched,
+  // 99% of the recoloured region also reads as changed - the images line up.
   //
-  // So the mask is now read from the rendered image alone, and asks a question
-  // that needs no alignment: did the model already paint this pixel roughly
-  // the target colour? Three tests, all in LAB.
+  // The colour test answers "is what the model put there plausibly this
+  // paint", and it catches what the diff cannot: the model regenerates the
+  // whole frame, so the view through a window changes on every render and
+  // reads as repainted.
+  //
+  // Neither works alone. The diff alone smears any incidental change. The
+  // colour test alone is worse for a near-neutral paint: a radius around
+  // Urbane Bronze (chroma 4.1) swallows every wall, ceiling and countertop in
+  // the room while rejecting the cabinets the model actually painted, because
+  // it rendered them richer than the flat chip. That render came back with
+  // grey walls and mottled cabinets.
   const targetChroma = Math.hypot(ta, tb);
 
-  // A genuinely neutral paint has no side of neutral to be on, so the hue test
+  // A genuinely neutral paint has no side of neutral to be on, so this test
   // would reject every pixel including the ones it should keep.
   const useHueSide = targetChroma > 2;
 
-  const build = (radius) => {
+  const build = (threshold) => {
     const mask = new Uint8Array(px);
-    let count = 0, sumL = 0, minL = 100, maxL = 0, changed = 0;
+    let count = 0, sumL = 0, minL = 100, maxL = 0, changed = 0, plausible = 0;
     for (let i = 0, p = 0; i < px; i++, p += 3) {
+      const dr = orig[p] - rend[p];
+      const dg = orig[p + 1] - rend[p + 1];
+      const db = orig[p + 2] - rend[p + 2];
+      const moved = Math.sqrt(dr * dr + dg * dg + db * db) > threshold;
+      if (moved) changed++;
+
       const [L, a, b] = rgbToLab([rend[p], rend[p + 1], rend[p + 2]]);
+      const fits =
+        (!useHueSide || a * ta + b * tb > 0) &&
+        Math.hypot(a - ta, b - tb) < o.chromaRadius &&
+        L < targetL + o.lightnessHeadroom;
+      if (fits) plausible++;
 
-      // 1. Same side of neutral as the paint. A dot product rather than a hue
-      //    angle, because for a barely saturated paint the angle is mostly
-      //    noise. This is what separates a cool navy from a warm beige, and it
-      //    is why white appliances - 11.7 away from Naval in a/b, but warm -
-      //    come through untouched.
-      if (useHueSide && a * ta + b * tb <= 0) continue;
-
-      // 2. Close enough in a/b to be this colour rather than a different one.
-      if (Math.hypot(a - ta, b - tb) >= radius) continue;
-
-      // 3. Not far brighter than the paint itself.
-      if (L >= targetL + o.lightnessHeadroom) continue;
+      if (!moved || !fits) continue;
 
       mask[i] = 1;
       count++;
       sumL += L;
       if (L < minL) minL = L;
       if (L > maxL) maxL = L;
-
-      // Diagnostic only. How much of the masked region also moved relative to
-      // the original says how well aligned the two images are, which is the
-      // number to check before ever trusting a diff-based rule here again.
-      if (orig) {
-        const dr = orig[p] - rend[p];
-        const dg = orig[p + 1] - rend[p + 1];
-        const db = orig[p + 2] - rend[p + 2];
-        if (Math.sqrt(dr * dr + dg * dg + db * db) > 28) changed++;
-      }
     }
-    return { mask, count, changed, meanL: count ? sumL / count : 0, minL, maxL };
+    return { mask, count, changed, plausible, meanL: count ? sumL / count : 0, minL, maxL };
   };
 
-  let region = build(o.chromaRadius);
-  let radiusUsed = o.chromaRadius;
+  let region = build(o.threshold);
+  let thresholdUsed = o.threshold;
   if (region.count / px < o.fallbackMinFraction) {
-    const relaxed = build(o.fallbackChromaRadius);
+    const relaxed = build(o.fallbackThreshold);
     if (relaxed.count > region.count) {
       region = relaxed;
-      radiusUsed = o.fallbackChromaRadius;
+      thresholdUsed = o.fallbackThreshold;
     }
   }
 
@@ -174,9 +175,11 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
       buffer: out,
       stats: {
         maskPixels: 0,
-        radiusUsed,
+        thresholdUsed,
+        changedFraction: +(region.changed / px).toFixed(4),
+        plausibleFraction: +(region.plausible / px).toFixed(4),
         applied: false,
-        reason: 'the model did not put this colour anywhere in the render',
+        reason: 'nothing that moved looks like this paint',
       },
     };
   }
@@ -220,13 +223,17 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
     stats: {
       maskPixels: region.count,
       maskFraction: +(region.count / px).toFixed(4),
-      radiusUsed,
-      // Of the pixels this pass recoloured, how many also differ from the
-      // original photo. Near 1 means the two images line up; well below means
-      // they do not, and no diff-based rule should be trusted here.
-      changedFraction: +(region.changed / region.count).toFixed(4),
+      thresholdUsed,
+      // The two tests, reported separately. changedFraction well above
+      // maskFraction means the model altered a lot the colour test rejected -
+      // usually the view through a window. plausibleFraction well above it
+      // means the room already held a lot of this colour, which is exactly
+      // when the diff is carrying the result.
+      changedFraction: +(region.changed / px).toFixed(4),
+      plausibleFraction: +(region.plausible / px).toFixed(4),
       targetChroma: +targetChroma.toFixed(1),
       hueSideApplied: useHueSide,
+      chromaRadius: o.chromaRadius,
       regionMeanL: +region.meanL.toFixed(1),
       targetL: +targetL.toFixed(1),
       targetLSource: targetLrv != null && targetLrv !== '' ? 'lrv' : 'hex',
