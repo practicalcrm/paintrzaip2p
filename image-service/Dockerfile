@@ -9,7 +9,9 @@ WORKDIR /app
 # which node:22-bookworm-slim does not. The first real branding pass came back
 # with the contractor's phone number as a row of tofu boxes. DejaVu is a couple
 # of MB and is what fontconfig resolves a generic sans-serif to.
-RUN apt-get update  && apt-get install -y --no-install-recommends fonts-dejavu-core fontconfig  && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fonts-dejavu-core fontconfig \
+ && rm -rf /var/lib/apt/lists/*
 
 # Copy manifests first so a code-only change reuses the dependency layer.
 COPY package.json ./
