@@ -194,7 +194,12 @@ app.post('/correct', async (req, res) => {
     let rend;
     try {
       rend = await sharp(rendBuf)
-        .resize(width, height, { fit: 'fill' })
+        // 'fill' stretched every render: Kontext answers a 1244x1265 photo
+        // with a 1024x1024 image, and forcing that back distorted the whole
+        // room. 'cover' scales uniformly and trims the overhang instead, so
+        // geometry survives. The workflow now also asks Kontext for the source
+        // aspect ratio, which keeps that trim down to a sliver.
+        .resize(width, height, { fit: 'cover', position: 'centre' })
         .removeAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
