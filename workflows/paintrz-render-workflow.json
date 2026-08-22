@@ -300,44 +300,16 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "contentType": "multipart-form-data",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "parameterType": "formBinaryData",
-              "name": "init_image",
-              "inputDataFieldName": "original"
-            },
-            {
-              "name": "prompt",
-              "value": "={{ $('Build Prompt').item.json.dezgo_prompt }}"
-            },
-            {
-              "name": "strength",
-              "value": "={{ $('Build Prompt').item.json.strength }}"
-            },
-            {
-              "name": "guidance",
-              "value": "={{ $('Build Prompt').item.json.guidance }}"
-            }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
           "response": {
             "response": {
               "responseFormat": "file",
               "outputPropertyName": "data"
             }
-          }
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Accept",
-              "value": "image/png"
-            }
-          ]
+          },
+          "timeout": 180000
         }
       },
       "id": "call_dezgo",
@@ -345,7 +317,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        140,
+        160,
         -80
       ],
       "onError": "continueErrorOutput",
@@ -660,7 +632,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Everything the image service needs, assembled here rather than in the HTTP\n// node's expression fields. An expression error inside a body field surfaces\n// as an unreadable request error; a Code node gives a stack.\nconst build = $('Build Prompt').first().json;\n\n// This n8n runs with filesystem binary mode, so `binary.data.data` is a\n// REFERENCE, not base64. Reading it directly handed sharp the literal string\n// \"filesystem-v2\", which it rejected in 9ms as an unsupported image format.\n// The helper resolves the reference to real bytes. The old jimp code had the\n// same bug, so it would have failed here too.\nconst rendered = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('base64');\n\n// The original is already a public Supabase URL, so the service fetches it\n// rather than round-tripping several MB of base64 through n8n a second time.\n// On a correction this is the previous UNBRANDED render, which is what\n// corrections are meant to build on.\nconst originalUrl = build.init_image_url;\n\nconst primary = Array.isArray(build.colors) && build.colors.length ? build.colors[0] : null;\n\nreturn [{ json: {\n  render_id: build.render_id,\n  original_url: originalUrl,\n  rendered_b64: rendered,\n  target_hex: build.target_hex,\n  // LRV is the manufacturer's published lightness and a better target than the\n  // hex, which is only a screen approximation of the chip. The colour proxy\n  // returns it, but app.html does not forward it yet - so this stays null for\n  // now and the service derives lightness from the hex.\n  target_lrv: (primary && primary.lrv != null) ? primary.lrv : null,\n  brand_logo_url: build.brand_logo_url || null,\n  brand_contact: build.brand_contact || null\n} }];"
+        "jsCode": "// If Dezgo answered with JSON rather than an image, say so here. Sending a\n// billing receipt on to the image service works, but the failure then surfaces\n// as \"unsupported image format\" from sharp, two systems away from the cause.\nconst _bin = $input.first().binary || {};\nconst _mime = (_bin.data && _bin.data.mimeType) || '';\nif (_mime.includes('json') || _mime.includes('text')) {\n  throw new Error('Dezgo returned ' + _mime + ' instead of an image - check the API contract, not the pipeline');\n}\n\n// Everything the image service needs, assembled here rather than in the HTTP\n// node's expression fields. An expression error inside a body field surfaces\n// as an unreadable request error; a Code node gives a stack.\nconst build = $('Build Prompt').first().json;\n\n// This n8n runs with filesystem binary mode, so `binary.data.data` is a\n// REFERENCE, not base64. Reading it directly handed sharp the literal string\n// \"filesystem-v2\", which it rejected in 9ms as an unsupported image format.\n// The helper resolves the reference to real bytes. The old jimp code had the\n// same bug, so it would have failed here too.\nconst rendered = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('base64');\n\n// The original is already a public Supabase URL, so the service fetches it\n// rather than round-tripping several MB of base64 through n8n a second time.\n// On a correction this is the previous UNBRANDED render, which is what\n// corrections are meant to build on.\nconst originalUrl = build.init_image_url;\n\nconst primary = Array.isArray(build.colors) && build.colors.length ? build.colors[0] : null;\n\nreturn [{ json: {\n  render_id: build.render_id,\n  original_url: originalUrl,\n  rendered_b64: rendered,\n  target_hex: build.target_hex,\n  // LRV is the manufacturer's published lightness and a better target than the\n  // hex, which is only a screen approximation of the chip. The colour proxy\n  // returns it, but app.html does not forward it yet - so this stays null for\n  // now and the service derives lightness from the hex.\n  target_lrv: (primary && primary.lrv != null) ? primary.lrv : null,\n  brand_logo_url: build.brand_logo_url || null,\n  brand_contact: build.brand_contact || null\n} }];"
       },
       "id": "c0000001-0000-4000-8000-000000000001",
       "name": "Build Correct Payload",
@@ -703,6 +675,20 @@
       "typeVersion": 2,
       "position": [
         680,
+        -80
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dezgo accepts the source image two ways: multipart with the raw file, or\n// JSON with init_image as base64. We have only ever used multipart, and under\n// API v2 that path answers with a billing receipt rather than the render -\n// confirmed by dumping the response bytes, which were 315 bytes of\n// {\"tx\":{\"_id\"... and never an image.\n//\n// This builds the JSON form instead. Binary is stored on the filesystem here,\n// so the reference has to be resolved to real bytes before encoding.\nconst build = $('Build Prompt').first().json;\nconst img = await this.helpers.getBinaryDataBuffer(0, 'original');\n\nreturn [{ json: {\n  prompt: build.dezgo_prompt,\n  init_image: img.toString('base64'),\n  strength: build.strength,\n  guidance: build.guidance\n} }];"
+      },
+      "id": "e0000001-0000-4000-8000-000000000001",
+      "name": "Build Dezgo Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        40,
         -80
       ],
       "onError": "continueErrorOutput"
@@ -862,7 +848,7 @@
       "main": [
         [
           {
-            "node": "Call Dezgo Flux 2",
+            "node": "Build Dezgo Payload",
             "type": "main",
             "index": 0
           }
@@ -1011,6 +997,24 @@
         [
           {
             "node": "Upload Render Variants",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dezgo Payload": {
+      "main": [
+        [
+          {
+            "node": "Call Dezgo Flux 2",
             "type": "main",
             "index": 0
           }
