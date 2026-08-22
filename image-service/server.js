@@ -153,7 +153,7 @@ async function brand(buffer, width, height, logoUrl, contact) {
     const fontSize = Math.max(12, Math.round(height * 0.022));
     const svg = Buffer.from(
       `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-         <text x="16" y="${height - 14}" font-family="Inter, Helvetica, Arial, sans-serif"
+         <text x="16" y="${height - 14}" font-family="Inter, 'DejaVu Sans', Helvetica, Arial, sans-serif"
                font-size="${fontSize}" fill="#ffffff"
                style="paint-order:stroke; stroke:#000000; stroke-width:${Math.max(2, Math.round(fontSize / 6))}; stroke-opacity:0.45;">
            ${escapeXml(contact)}
