@@ -93,12 +93,20 @@ async function resolveImage(url, b64, label) {
 function describe(buf, label) {
   if (!buf || !buf.length) return { label, bytes: 0, note: 'empty' };
   const head = buf.subarray(0, 12);
-  return {
+  const d = {
     label,
     bytes: buf.length,
     hex: head.toString('hex'),
     ascii: head.toString('latin1').replace(/[^ -~]/g, '.'),
   };
+  // A short buffer that starts with { or [ is an API response someone stored as
+  // a file. The whole point of the diagnostic is to read what it says, so print
+  // it rather than making the next person go digging for it.
+  const first = buf[0];
+  if (buf.length <= 4096 && (first === 0x7b || first === 0x5b)) {
+    d.body = buf.toString('utf8').slice(0, 2000);
+  }
+  return d;
 }
 
 async function decode(buf, label) {
@@ -106,7 +114,7 @@ async function decode(buf, label) {
     return await sharp(buf).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   } catch (e) {
     const d = describe(buf, label);
-    throw new Error(`${label}: ${e.message} | ${d.bytes} bytes, starts ${d.hex} (${d.ascii})`);
+    throw new Error(`${label}: ${e.message} | ${d.bytes} bytes, starts ${d.hex} (${d.ascii})${d.body ? ' | body: ' + d.body : ''}`);
   }
 }
 
@@ -192,7 +200,7 @@ app.post('/correct', async (req, res) => {
         .toBuffer({ resolveWithObject: true });
     } catch (e) {
       const d = describe(rendBuf, 'rendered');
-      throw new Error(`rendered: ${e.message} | ${d.bytes} bytes, starts ${d.hex} (${d.ascii})`);
+      throw new Error(`rendered: ${e.message} | ${d.bytes} bytes, starts ${d.hex} (${d.ascii})${d.body ? ' | body: ' + d.body : ''}`);
     }
 
     const { buffer: corrected, stats } = correct(
