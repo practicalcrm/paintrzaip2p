@@ -85,6 +85,31 @@ async function resolveImage(url, b64, label) {
   throw new Error(`missing ${label}`);
 }
 
+// "Input buffer contains unsupported image format" says nothing about WHAT
+// arrived. Nearly always the answer is in the first few bytes: FF D8 FF is a
+// JPEG, 89 50 4E 47 a PNG, and anything starting '{' is an error body that
+// something upstream stored as if it were a file. Report it rather than making
+// the next person guess.
+function describe(buf, label) {
+  if (!buf || !buf.length) return { label, bytes: 0, note: 'empty' };
+  const head = buf.subarray(0, 12);
+  return {
+    label,
+    bytes: buf.length,
+    hex: head.toString('hex'),
+    ascii: head.toString('latin1').replace(/[^ -~]/g, '.'),
+  };
+}
+
+async function decode(buf, label) {
+  try {
+    return await sharp(buf).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  } catch (e) {
+    const d = describe(buf, label);
+    throw new Error(`${label}: ${e.message} | ${d.bytes} bytes, starts ${d.hex} (${d.ascii})`);
+  }
+}
+
 function escapeXml(s) {
   return String(s).replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
 }
@@ -155,14 +180,20 @@ app.post('/correct', async (req, res) => {
     // The original photo defines the output dimensions. The model returns
     // whatever size it likes, and a corrected image that does not line up with
     // the source is useless for a before/after.
-    const orig = await sharp(origBuf).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const orig = await decode(origBuf, 'original');
     const { width, height } = orig.info;
 
-    const rend = await sharp(rendBuf)
-      .resize(width, height, { fit: 'fill' })
-      .removeAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
+    let rend;
+    try {
+      rend = await sharp(rendBuf)
+        .resize(width, height, { fit: 'fill' })
+        .removeAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+    } catch (e) {
+      const d = describe(rendBuf, 'rendered');
+      throw new Error(`rendered: ${e.message} | ${d.bytes} bytes, starts ${d.hex} (${d.ascii})`);
+    }
 
     const { buffer: corrected, stats } = correct(
       orig.data, rend.data, width, height, target_hex, target_lrv, options || {}
