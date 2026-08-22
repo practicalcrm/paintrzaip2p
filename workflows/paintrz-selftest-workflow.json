@@ -114,13 +114,12 @@
           "id": "8BZNKwDvrkAm9TKo",
           "name": "supabase new api 4"
         }
-      },
-      "alwaysOutputData": true
+      }
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?select=id,original_photo_url,created_at&user_id=eq.{{ $('Read Profile').first().json.user_id }}&original_photo_url=not.is.null&order=created_at.desc&limit=1",
+        "url": "https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?select=id,original_photo_url,created_at&original_photo_url=not.is.null&order=created_at.desc&limit=1",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
         "options": {}
@@ -143,7 +142,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Reuses the newest photo this account has already uploaded rather than\n// inventing a URL: it is known-public, known-fetchable, and the image service\n// has to fetch the same one as original_url.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.original_photo_url) return it;\n  }\n  return null;\n}\n\nconst prior = firstRow('Find A Photo');\nif (!prior || !prior.original_photo_url) {\n  throw new Error('this account has no prior render to borrow a photo from - upload one through the app first');\n}\n\nconst profile = $('Read Profile').first().json;\n\n// A dark navy on cabinets is the hardest case for the LAB pass: a big\n// lightness move, so if mean-L retargeting is going to misbehave it shows here\n// rather than on some safe greige.\nreturn [{ json: {\n  user_id: profile.user_id,\n  original_photo_url: prior.original_photo_url,\n  color_hex: '#232E38',\n  color_name: 'Sherwin-Williams Naval (SW 6244)',\n  surface: 'kitchen cabinets',\n  prompt: 'Repaint the kitchen cabinets Sherwin-Williams Naval.',\n  brand_logo_url: profile.brand_logo_url,\n  brand_contact: profile.brand_contact\n}, pairedItem: 0 }];"
+        "jsCode": "// Prefers a photo a real user has already uploaded, because that is the exact\n// kind of URL the image service will be handed as original_url in production.\n// Falls back to a fixture in the repo so the test still runs against an empty\n// database - which is what it found on its first run.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.original_photo_url) return it;\n  }\n  return null;\n}\n\nconst FIXTURE = 'https://raw.githubusercontent.com/practicalcrm/paintrzaip2p/main/workflows/selftest-kitchen.jpg';\nconst prior = firstRow('Find A Photo');\nconst photoUrl = (prior && prior.original_photo_url) || FIXTURE;\n\nconst profile = $('Read Profile').first().json;\n\n// A dark navy on cabinets is the hardest case for the LAB pass: a big\n// lightness move, so if mean-L retargeting is going to misbehave it shows here\n// rather than on some safe greige.\nreturn [{ json: {\n  user_id: profile.user_id,\n  original_photo_url: photoUrl,\n  color_hex: '#232E38',\n  color_name: 'Sherwin-Williams Naval (SW 6244)',\n  surface: 'kitchen cabinets',\n  prompt: 'Repaint the kitchen cabinets Sherwin-Williams Naval.',\n  brand_logo_url: profile.brand_logo_url,\n  brand_contact: profile.brand_contact\n}, pairedItem: 0 }];"
       },
       "id": "build_test",
       "name": "Build Test Render",
@@ -262,7 +261,7 @@
     },
     {
       "parameters": {
-        "content": "## Temporary — delete after the pipeline is proven\n\nStands in for app.html so the render pipeline can be exercised without a browser, a login, or an upload.\n\nIt borrows the newest photo already on the test account, inserts a fresh `renders` row, posts **the exact payload app.html posts**, then reads the row back. `Verdict` is the node to read.\n\n**It spends real money.** One credit off the test account and one BFL Kontext call per run. `Grant Test Credits` sets the balance to 3 only when the account has none and no active subscription — without it the pipeline answers 402 and the run teaches nothing about BFL.\n\n`Fire Render Webhook` continues on error on purpose: a 402 or 500 must still reach `Read Result Row`, because what the row says is the actual finding.",
+        "content": "## Temporary — delete after the pipeline is proven\n\nStands in for app.html so the render pipeline can be exercised without a browser, a login, or an upload.\n\nIt borrows the newest photo any account has already uploaded — or `workflows/selftest-kitchen.jpg` from the repo when there is none — inserts a fresh `renders` row, posts **the exact payload app.html posts**, then reads the row back. `Verdict` is the node to read.\n\n**It spends real money.** One credit off the test account and one BFL Kontext call per run. `Grant Test Credits` sets the balance to 3 only when the account has none and no active subscription — without it the pipeline answers 402 and the run teaches nothing about BFL.\n\n`Fire Render Webhook` continues on error on purpose: a 402 or 500 must still reach `Read Result Row`, because what the row says is the actual finding.",
         "height": 460,
         "width": 460,
         "color": 3
