@@ -92,7 +92,25 @@ const DEFAULTS = {
   // all project negative onto magenta - so the honest threshold is near zero
   // and this is mostly headroom. Raised per photo when the room already holds
   // some of the flag's hue.
-  flagProjection: 30,
+  //
+  // Kept low deliberately. A sunlit cabinet face washes out towards white,
+  // which collapses its chroma and therefore its projection, and at 30 the
+  // highlight on the island fell out of the mask and stayed the wrong colour.
+  // The room only reached 8.7 on the photo this was measured against, so a
+  // floor of 30 was buying nothing and costing highlights.
+  flagProjection: 12,
+
+  // How far above anything already in the room the threshold has to sit.
+  flagMargin: 10,
+
+  // Grow the finished mask by this many pixels.
+  //
+  // The two renders agree about where the cabinets are, but not to the pixel,
+  // so a rim of the picture's own colour survives along every door edge and
+  // reads as chipped, distressed paint. Growing past the seam covers it. The
+  // cost is a hairline of paint colour on the wall side of each edge, which is
+  // far less visible than the chipping.
+  dilateRadius: 3,
 
   // Below this much difference between the region's mean lightness and the
   // target's, leave lightness alone entirely and behave exactly as the original
@@ -253,8 +271,26 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
     }
   }
 
+  // Grow a mask outwards by r pixels. Same summed-area trick as the opening:
+  // any pixel with a masked neighbour inside the window joins it.
+  const dilate = (mask, r) => {
+    if (r <= 0) return mask;
+    const sat = integrate(mask);
+    const grown = new Uint8Array(px);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (windowSum(sat, x, y, r).sum > 0) grown[y * width + x] = 1;
+      }
+    }
+    return grown;
+  };
+
   const rawCount = region.count;
   region.mask = open(region.mask);
+
+  // Only the flag mask is grown. The diff-and-colour mask already errs
+  // generous, and widening it further is exactly the wrong direction.
+  if (opts.mask) region.mask = dilate(region.mask, o.dilateRadius);
 
   // Lightness statistics have to come from the mask that will actually be
   // used, so this sweep runs after the opening rather than during the build.
@@ -414,7 +450,7 @@ function pickFlag(orig, width, height, opts = {}) {
 
   // Sit above whatever the room already has, but never below the floor - a
   // room full of foliage should not drag the threshold down to nothing.
-  const threshold = Math.max(o.flagProjection, winner.roomMax + 20);
+  const threshold = Math.max(o.flagProjection, winner.roomMax + o.flagMargin);
 
   return { flagHex: winner.hex, flagName: winner.name, threshold, scored };
 }
