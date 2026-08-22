@@ -1302,11 +1302,13 @@ correctionsUsed = 0;
 
 statusEl.textContent = 'Rendering — this takes about 10 seconds…';
 
-// Call your n8n webhook. n8n should: run Dezgo Flux 2, apply the
-// LAB color-correction pass toward color_hex, overlay the account's
-// logo/contact, upload the result to Supabase Storage, then update
-// this renders row (status, rendered_photo_url, branded_photo_url)
-// using the service-role key.
+// Call the n8n webhook. It submits the edit to BFL FLUX.1 Kontext and
+// polls until the job is Ready, applies the LAB color-correction pass
+// toward color_hex, overlays the account's logo/contact, uploads both
+// variants to Supabase Storage, then updates this renders row (status,
+// rendered_photo_url, branded_photo_url) using the service-role key.
+// It holds this request open for the whole run, so the poll below is
+// mostly a safety net for a response that never arrives.
 try {
 const resp = await fetch(CONFIG.N8N_RENDER_WEBHOOK, {
 method: 'POST',

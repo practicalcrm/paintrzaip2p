@@ -259,7 +259,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// PostgREST returns an array, and this n8n build splits it into one item per\n// row - so .first().json IS the row, and [0] on it is undefined. Confirmed\n// against execution 1416, which died here reading original_photo_url off\n// undefined. Normalise both shapes rather than betting on either.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.id) return it;\n  }\n  return null;\n}\n\nconst body = $('Webhook').first().json.body;\nconst renderRow = firstRow('Get Render Row') || {};\nconst profileRow = firstRow('Get Profile Row') || {};\nconst access = $('Compute Access').first().json;\n\nconst isCorrection = access.is_correction;\nconst targetHex = isCorrection ? renderRow.color_hex : (body.color_hex || renderRow.color_hex || null);\n\n// What the user typed in the app's \"Paint the\" box.\nconst surface = (body.surface || '').trim() || 'surface';\n\n// Up to three picks, named explicitly so the model uses these exact colours.\nconst colors = Array.isArray(body.colors) ? body.colors : [];\nconst colorList = colors.length\n  ? colors.map(c => `${c.name} (${c.hex})`).join(', ')\n  : (renderRow.color_name || body.color_name || '');\n\nlet basePrompt;\nif (targetHex || colorList) {\n  basePrompt = `Repaint the ${surface}. Use these exact colours: ${colorList || targetHex}. Keep everything else in the photo identical - same lighting, same room geometry, same hardware, same materials elsewhere.`;\n} else {\n  basePrompt = `Repaint the ${surface}: ${body.prompt || renderRow.prompt}. Keep everything else in the photo identical - same lighting, same room geometry, same hardware.`;\n}\n\nconst correctionSuffix = isCorrection ? ` Adjustment requested: \"${body.correction_prompt}\".` : '';\n\n// Corrections re-render from the UNBRANDED copy. Feeding the branded one back\n// in would composite the logo a second time, and again on every correction.\nconst initImageUrl = (isCorrection && renderRow.rendered_photo_url)\n  ? renderRow.rendered_photo_url\n  : renderRow.original_photo_url;\n\nreturn [{\n  json: {\n    render_id: renderRow.id,\n    user_id: renderRow.user_id,\n    is_correction: isCorrection,\n    free_correction: access.free_correction,\n    subscription_active: access.subscription_active,\n    target_hex: targetHex,\n    colors,\n    surface,\n    init_image_url: initImageUrl,\n    dezgo_prompt: basePrompt + correctionSuffix,\n    strength: isCorrection ? 0.3 : 0.45,\n    guidance: 7,\n    corrections_used: renderRow.corrections_used || 0,\n    brand_logo_url: body.brand_logo_url || profileRow.brand_logo_url,\n    brand_contact: body.brand_contact || profileRow.brand_contact\n  }\n}];"
+        "jsCode": "// PostgREST returns an array, and this n8n build splits it into one item per\n// row - so .first().json IS the row, and [0] on it is undefined. Confirmed\n// against execution 1416, which died here reading original_photo_url off\n// undefined. Normalise both shapes rather than betting on either.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.id) return it;\n  }\n  return null;\n}\n\nconst body = $('Webhook').first().json.body;\nconst renderRow = firstRow('Get Render Row') || {};\nconst profileRow = firstRow('Get Profile Row') || {};\nconst access = $('Compute Access').first().json;\n\nconst isCorrection = access.is_correction;\nconst targetHex = isCorrection ? renderRow.color_hex : (body.color_hex || renderRow.color_hex || null);\n\n// What the user typed in the app's \"Paint the\" box.\nconst surface = (body.surface || '').trim() || 'surface';\n\n// Up to three picks, named explicitly so the model uses these exact colours.\nconst colors = Array.isArray(body.colors) ? body.colors : [];\nconst colorList = colors.length\n  ? colors.map(c => `${c.name} (${c.hex})`).join(', ')\n  : (renderRow.color_name || body.color_name || '');\n\nlet basePrompt;\nif (targetHex || colorList) {\n  basePrompt = `Repaint the ${surface}. Use these exact colours: ${colorList || targetHex}. Keep everything else in the photo identical - same lighting, same room geometry, same hardware, same materials elsewhere.`;\n} else {\n  basePrompt = `Repaint the ${surface}: ${body.prompt || renderRow.prompt}. Keep everything else in the photo identical - same lighting, same room geometry, same hardware.`;\n}\n\nconst correctionSuffix = isCorrection ? ` Adjustment requested: \"${body.correction_prompt}\".` : '';\n\n// Corrections re-render from the UNBRANDED copy. Feeding the branded one back\n// in would composite the logo a second time, and again on every correction.\nconst initImageUrl = (isCorrection && renderRow.rendered_photo_url)\n  ? renderRow.rendered_photo_url\n  : renderRow.original_photo_url;\n\nreturn [{\n  json: {\n    render_id: renderRow.id,\n    user_id: renderRow.user_id,\n    is_correction: isCorrection,\n    free_correction: access.free_correction,\n    subscription_active: access.subscription_active,\n    target_hex: targetHex,\n    colors,\n    surface,\n    init_image_url: initImageUrl,\n    render_prompt: basePrompt + correctionSuffix,\n    corrections_used: renderRow.corrections_used || 0,\n    brand_logo_url: body.brand_logo_url || profileRow.brand_logo_url,\n    brand_contact: body.brand_contact || profileRow.brand_contact\n  }\n}];"
       },
       "id": "build_prompt",
       "name": "Build Prompt",
@@ -288,7 +288,21 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -80,
+        -120,
+        -80
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Kontext is an instruction-following editor, not img2img: it has no strength\n// or guidance dial to soften the edit with. What holds the rest of the photo\n// still is the \"keep everything else identical\" wording Build Prompt puts in\n// the instruction, so that sentence is load-bearing here.\n//\n// Dezgo is gone. Under API v2 its image2image endpoint answered every request\n// with a 315-byte billing receipt - {\"tx\":{\"_id\"... - at HTTP 2xx, in both\n// multipart and JSON+base64 form, and never once with image bytes.\nconst build = $('Build Prompt').first().json;\n\n// Binary is stored in filesystem mode here, so `binary.original.data` is a\n// REFERENCE, not base64. The helper resolves it to real bytes.\nconst img = await this.helpers.getBinaryDataBuffer(0, 'original');\n\nreturn [{ json: {\n  prompt: build.render_prompt,\n  input_image: img.toString('base64'),\n  output_format: 'jpeg',\n  // 2 is the highest BFL accepts once an input image is present.\n  safety_tolerance: 2,\n  // Upsampling rewrites the instruction, which would let the model\n  // reinterpret the colour names - exactly what the LAB pass downstream\n  // exists to pin down.\n  prompt_upsampling: false\n}, pairedItem: 0 }];"
+      },
+      "id": "e0000001-0000-4000-8000-000000000001",
+      "name": "Build BFL Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
         -80
       ],
       "onError": "continueErrorOutput"
@@ -296,37 +310,166 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.dezgo.com/image2image_flux_2",
+        "url": "https://api.bfl.ai/v1/flux-kontext-pro",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
-          "response": {
-            "response": {
-              "responseFormat": "file",
-              "outputPropertyName": "data"
-            }
-          },
-          "timeout": 180000
+          "timeout": 60000
         }
       },
-      "id": "call_dezgo",
-      "name": "Call Dezgo Flux 2",
+      "id": "submit_bfl",
+      "name": "Submit BFL Kontext",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        160,
+        240,
         -80
       ],
       "onError": "continueErrorOutput",
       "credentials": {
         "httpHeaderAuth": {
-          "id": "Oj08owu4zivP6hbD",
-          "name": "Paintrz Dezgo API key"
+          "id": "XWyZytnxA8zWB6eI",
+          "name": "Paintrz BFL API key"
         }
       }
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "wait_for_render",
+      "name": "Wait For Render",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        420,
+        -80
+      ],
+      "webhookId": "b7f1c2d4-3a56-4e88-9c10-2f5a7e0d9b31"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Submit BFL Kontext').first().json.polling_url || ('https://api.bfl.ai/v1/get_result?id=' + $('Submit BFL Kontext').first().json.id) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "poll_bfl",
+      "name": "Poll BFL Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        -80
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "XWyZytnxA8zWB6eI",
+          "name": "Paintrz BFL API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// BFL is submit-then-poll: the POST returns a job id, and the image only\n// exists once get_result reports \"Ready\". Every way out of this loop is\n// decided here rather than in the IF, so a moderated or errored job fails\n// with its real reason instead of eventually reporting a timeout.\nconst r = $input.first().json || {};\nconst status = r.status || '';\n\n// $runIndex counts this node's own runs inside the execution, which is what\n// lets the cap survive the loop back to Wait - a counter carried in the item\n// would reset. 40 x 3s is about two minutes; Kontext Pro normally lands in ten\n// seconds.\nconst MAX_POLLS = 40;\n\nif (status === 'Ready') {\n  const sample = r.result && (r.result.sample || r.result.url);\n  if (!sample) throw new Error('BFL reported Ready with no result.sample');\n  return [{ json: { ready: true, sample_url: sample, polls: $runIndex + 1 }, pairedItem: 0 }];\n}\n\n// Anything outside this list is terminal - Error, Content Moderated, Request\n// Moderated, Task not found. Looping on those burns the full two minutes and\n// then reports a timeout, which hides the actual cause.\nconst PENDING = ['Pending', 'Queued', 'Processing', 'Request Accepted'];\nif (PENDING.indexOf(status) === -1) {\n  const detail = r.details ? ' - ' + JSON.stringify(r.details) : '';\n  throw new Error('BFL returned status \"' + status + '\"' + detail);\n}\n\nif ($runIndex + 1 >= MAX_POLLS) {\n  throw new Error('BFL still ' + status + ' after ' + MAX_POLLS + ' polls');\n}\n\nreturn [{ json: { ready: false, status, polls: $runIndex + 1 }, pairedItem: 0 }];"
+      },
+      "id": "check_bfl_status",
+      "name": "Check BFL Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        -80
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "bflready",
+              "leftValue": "={{ $json.ready }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bfl_ready",
+      "name": "Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// BFL hands back a signed delivery URL rather than bytes, and the image\n// service already accepts a URL for either image - so the render never becomes\n// an n8n binary at all. That also keeps this path clear of the filesystem\n// binary reference that once handed sharp the literal string \"filesystem-v2\".\n//\n// Those delivery URLs are short-lived, so nothing may sit between here and the\n// service's fetch.\nconst build = $('Build Prompt').first().json;\nconst sampleUrl = $input.first().json.sample_url;\nif (!sampleUrl) throw new Error('no BFL sample url reached Build Correct Payload');\n\n// The original is already a public Supabase URL, so the service fetches it\n// rather than round-tripping several MB of base64 through n8n. On a correction\n// this is the previous UNBRANDED render, which is what corrections build on.\nconst originalUrl = build.init_image_url;\n\nconst primary = Array.isArray(build.colors) && build.colors.length ? build.colors[0] : null;\n\nreturn [{ json: {\n  render_id: build.render_id,\n  original_url: originalUrl,\n  rendered_url: sampleUrl,\n  target_hex: build.target_hex,\n  // LRV is the manufacturer's published lightness and a better target than the\n  // hex, which is only a screen approximation of the chip. The colour proxy\n  // returns it, but app.html does not forward it yet - so this stays null for\n  // now and the service derives lightness from the hex.\n  target_lrv: (primary && primary.lrv != null) ? primary.lrv : null,\n  brand_logo_url: build.brand_logo_url || null,\n  brand_contact: build.brand_contact || null\n}, pairedItem: 0 }];"
+      },
+      "id": "c0000001-0000-4000-8000-000000000001",
+      "name": "Build Correct Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        -180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://paintrzaip2p.railway.internal:8080/correct",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "c0000001-0000-4000-8000-000000000002",
+      "name": "Correct + Brand",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        -180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// The service answers with JSON even when it fails, so a failure arrives here\n// as ok:false rather than as a dead branch. Throwing turns it into the error\n// output, which routes to Mark Failed and refunds the credit.\nconst r = $input.first().json;\nif (!r || r.ok !== true) {\n  throw new Error('image service: ' + ((r && r.reason) || 'no response'));\n}\n\nconst build = $('Build Prompt').first().json;\n\n// Two items -> the upload node runs twice, once per variant, exactly as the\n// old Code node did. stats rides along on the clean variant so the execution\n// log records what the colour pass actually decided.\nreturn [\n  {\n    json: { render_id: build.render_id, variant: 'render', stats: r.stats, ms: r.ms,\n            bfl_cost: $('Submit BFL Kontext').first().json.cost },\n    binary: { data: { data: r.render_b64, mimeType: 'image/jpeg', fileName: 'render.jpg' } },\n    pairedItem: 0\n  },\n  {\n    json: { render_id: build.render_id, variant: 'branded' },\n    binary: { data: { data: r.branded_b64, mimeType: 'image/jpeg', fileName: 'branded.jpg' } },\n    pairedItem: 0\n  }\n];"
+      },
+      "id": "c0000001-0000-4000-8000-000000000003",
+      "name": "Split Variants",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        -180
+      ],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -357,8 +500,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        860,
-        -80
+        1700,
+        -180
       ],
       "onError": "continueErrorOutput",
       "credentials": {
@@ -393,8 +536,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        800,
-        -80
+        1880,
+        -180
       ],
       "executeOnce": true,
       "credentials": {
@@ -416,8 +559,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1020,
-        -80
+        2060,
+        -180
       ]
     },
     {
@@ -445,8 +588,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        580,
-        260
+        1160,
+        320
       ],
       "onError": "continueRegularOutput",
       "executeOnce": true,
@@ -485,8 +628,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        800,
-        260
+        1340,
+        320
       ]
     },
     {
@@ -505,8 +648,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1020,
-        180
+        1520,
+        240
       ],
       "onError": "continueRegularOutput",
       "executeOnce": true,
@@ -530,13 +673,13 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1240,
-        260
+        1700,
+        320
       ]
     },
     {
       "parameters": {
-        "content": "## Credentials, not environment variables\nThis workflow uses **no `$env` at all**.\n\n- **Paintrz Supabase service role** — a *Custom Auth* credential carrying both headers:\n  `{ \"headers\": { \"apikey\": \"<service-role>\", \"Authorization\": \"Bearer <service-role>\" } }`\n- **Paintrz Dezgo API key** — a *Header Auth* credential: name `X-Dezgo-Key`, value the Dezgo key.\n\nWhy: env vars are global to every node and every workflow, and reading them from a Code node needs `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, which exposes **every** secret to **every** Code node. Credentials are scoped per node, are never readable from Code, and rotate in one place with no redeploy.\n\nThe Supabase URL is hardcoded because it is not a secret — it is already public in app.html.",
+        "content": "## Credentials, not environment variables\nThis workflow uses **no `$env` at all**.\n\n- **Paintrz Supabase service role** — a *Custom Auth* credential carrying both headers:\n  `{ \"headers\": { \"apikey\": \"<service-role>\", \"Authorization\": \"Bearer <service-role>\" } }`\n- **Paintrz BFL API key** — a *Header Auth* credential: name `x-key`, value the BFL key. Both the submit node and the poll node carry it — `/v1/get_result` rejects an unauthenticated read.\n\nWhy: env vars are global to every node and every workflow, and reading them from a Code node needs `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, which exposes **every** secret to **every** Code node. Credentials are scoped per node, are never readable from Code, and rotate in one place with no redeploy.\n\nThe Supabase URL is hardcoded because it is not a secret — it is already public in app.html.",
         "height": 320,
         "width": 400,
         "color": 5
@@ -594,8 +737,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        360,
-        -440
+        1480,
+        -520
       ]
     },
     {
@@ -610,8 +753,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        540,
-        480
+        1140,
+        500
       ]
     },
     {
@@ -632,66 +775,19 @@
     },
     {
       "parameters": {
-        "jsCode": "// If Dezgo answered with JSON rather than an image, say so here. Sending a\n// billing receipt on to the image service works, but the failure then surfaces\n// as \"unsupported image format\" from sharp, two systems away from the cause.\nconst _bin = $input.first().binary || {};\nconst _mime = (_bin.data && _bin.data.mimeType) || '';\nif (_mime.includes('json') || _mime.includes('text')) {\n  throw new Error('Dezgo returned ' + _mime + ' instead of an image - check the API contract, not the pipeline');\n}\n\n// Everything the image service needs, assembled here rather than in the HTTP\n// node's expression fields. An expression error inside a body field surfaces\n// as an unreadable request error; a Code node gives a stack.\nconst build = $('Build Prompt').first().json;\n\n// This n8n runs with filesystem binary mode, so `binary.data.data` is a\n// REFERENCE, not base64. Reading it directly handed sharp the literal string\n// \"filesystem-v2\", which it rejected in 9ms as an unsupported image format.\n// The helper resolves the reference to real bytes. The old jimp code had the\n// same bug, so it would have failed here too.\nconst rendered = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('base64');\n\n// The original is already a public Supabase URL, so the service fetches it\n// rather than round-tripping several MB of base64 through n8n a second time.\n// On a correction this is the previous UNBRANDED render, which is what\n// corrections are meant to build on.\nconst originalUrl = build.init_image_url;\n\nconst primary = Array.isArray(build.colors) && build.colors.length ? build.colors[0] : null;\n\nreturn [{ json: {\n  render_id: build.render_id,\n  original_url: originalUrl,\n  rendered_b64: rendered,\n  target_hex: build.target_hex,\n  // LRV is the manufacturer's published lightness and a better target than the\n  // hex, which is only a screen approximation of the chip. The colour proxy\n  // returns it, but app.html does not forward it yet - so this stays null for\n  // now and the service derives lightness from the hex.\n  target_lrv: (primary && primary.lrv != null) ? primary.lrv : null,\n  brand_logo_url: build.brand_logo_url || null,\n  brand_contact: build.brand_contact || null\n} }];"
+        "content": "## The render is submit-then-poll\n`POST /v1/flux-kontext-pro` returns `{id, polling_url, cost}` — **not** an image. The image exists only once `polling_url` reports `status: Ready`, and then only as a short-lived signed URL at `result.sample`.\n\n`Check BFL Status` owns every exit from this loop: **Ready** leaves it, **Error / Content Moderated / Request Moderated / Task not found** throw with their real reason, and a cap of 40 polls stops it running forever. The cap reads `$runIndex`, which counts that node's own runs — a counter carried in the item would reset on every pass.\n\nThe sample URL goes straight to the image service as `rendered_url`, so the render never becomes an n8n binary. That removes the `filesystem-v2` reference trap from this path entirely.\n\nReplaced Dezgo, which answered every variant tried with a 315-byte billing receipt at HTTP 2xx instead of an image.",
+        "height": 400,
+        "width": 480,
+        "color": 4
       },
-      "id": "c0000001-0000-4000-8000-000000000001",
-      "name": "Build Correct Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "sticky_bfl",
+      "name": "Sticky — BFL Polling",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
       "position": [
-        320,
-        -80
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://paintrzaip2p.railway.internal:8080/correct",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": {
-          "timeout": 120000
-        }
-      },
-      "id": "c0000001-0000-4000-8000-000000000002",
-      "name": "Correct + Brand",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        500,
-        -80
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// The service answers with JSON even when it fails, so a failure arrives here\n// as ok:false rather than as a dead branch. Throwing turns it into the error\n// output, which routes to Mark Failed and refunds the credit.\nconst r = $input.first().json;\nif (!r || r.ok !== true) {\n  throw new Error('image service: ' + ((r && r.reason) || 'no response'));\n}\n\nconst build = $('Build Prompt').first().json;\n\n// Two items -> the upload node runs twice, once per variant, exactly as the\n// old Code node did. stats rides along on the clean variant so the execution\n// log records what the colour pass actually decided.\nreturn [\n  {\n    json: { render_id: build.render_id, variant: 'render', stats: r.stats, ms: r.ms },\n    binary: { data: { data: r.render_b64, mimeType: 'image/jpeg', fileName: 'render.jpg' } }\n  },\n  {\n    json: { render_id: build.render_id, variant: 'branded' },\n    binary: { data: { data: r.branded_b64, mimeType: 'image/jpeg', fileName: 'branded.jpg' } }\n  }\n];"
-      },
-      "id": "c0000001-0000-4000-8000-000000000003",
-      "name": "Split Variants",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        680,
-        -80
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Dezgo accepts the source image two ways: multipart with the raw file, or\n// JSON with init_image as base64. We have only ever used multipart, and under\n// API v2 that path answers with a billing receipt rather than the render -\n// confirmed by dumping the response bytes, which were 315 bytes of\n// {\"tx\":{\"_id\"... and never an image.\n//\n// This builds the JSON form instead. Binary is stored on the filesystem here,\n// so the reference has to be resolved to real bytes before encoding.\nconst build = $('Build Prompt').first().json;\nconst img = await this.helpers.getBinaryDataBuffer(0, 'original');\n\nreturn [{ json: {\n  prompt: build.dezgo_prompt,\n  init_image: img.toString('base64'),\n  strength: build.strength,\n  guidance: build.guidance\n} }];"
-      },
-      "id": "e0000001-0000-4000-8000-000000000001",
-      "name": "Build Dezgo Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        40,
-        -80
-      ],
-      "onError": "continueErrorOutput"
+        400,
+        -580
+      ]
     }
   ],
   "connections": {
@@ -848,25 +944,7 @@
       "main": [
         [
           {
-            "node": "Build Dezgo Payload",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Mark Failed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call Dezgo Flux 2": {
-      "main": [
-        [
-          {
-            "node": "Build Correct Payload",
+            "node": "Build BFL Payload",
             "type": "main",
             "index": 0
           }
@@ -1010,11 +1088,11 @@
         ]
       ]
     },
-    "Build Dezgo Payload": {
+    "Build BFL Payload": {
       "main": [
         [
           {
-            "node": "Call Dezgo Flux 2",
+            "node": "Submit BFL Kontext",
             "type": "main",
             "index": 0
           }
@@ -1022,6 +1100,89 @@
         [
           {
             "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit BFL Kontext": {
+      "main": [
+        [
+          {
+            "node": "Wait For Render",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait For Render": {
+      "main": [
+        [
+          {
+            "node": "Poll BFL Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll BFL Result": {
+      "main": [
+        [
+          {
+            "node": "Check BFL Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check BFL Status": {
+      "main": [
+        [
+          {
+            "node": "Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready?": {
+      "main": [
+        [
+          {
+            "node": "Build Correct Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait For Render",
             "type": "main",
             "index": 0
           }
