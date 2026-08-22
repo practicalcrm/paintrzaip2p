@@ -77,6 +77,16 @@ const DEFAULTS = {
   // view through it on every render, so those pixels always read as changed.
   lightnessHeadroom: 45,
 
+  // Shape. A repainted cabinet run is a large solid region; the confetti left
+  // by wood grain and granite speckle failing to line up between the two
+  // images is not. Both pass the colour and diff tests, so only the shape
+  // separates them. A pixel survives if a neighbourhood this wide is mostly
+  // masked too, then the survivors are grown back by the same radius so
+  // straight cabinet edges - which sit at 50% density by definition - do not
+  // come back with an unpainted rim.
+  densityRadius: 6,
+  minDensity: 0.65,
+
   // Below this much difference between the region's mean lightness and the
   // target's, leave lightness alone entirely and behave exactly as the original
   // spec did. The corrective is for the cases the model could not reach, not a
@@ -157,7 +167,61 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
       if (L < minL) minL = L;
       if (L > maxL) maxL = L;
     }
-    return { mask, count, changed, plausible, meanL: count ? sumL / count : 0, minL, maxL };
+    return { mask, count, changed, plausible };
+  };
+
+  // Summed-area table, so the density of any window is three additions
+  // regardless of its size.
+  const integrate = (src) => {
+    const w1 = width + 1;
+    const sat = new Int32Array(w1 * (height + 1));
+    for (let y = 0; y < height; y++) {
+      let row = 0;
+      for (let x = 0; x < width; x++) {
+        row += src[y * width + x];
+        sat[(y + 1) * w1 + (x + 1)] = sat[y * w1 + (x + 1)] + row;
+      }
+    }
+    return sat;
+  };
+
+  const windowSum = (sat, x, y, r) => {
+    const w1 = width + 1;
+    const x0 = Math.max(0, x - r), x1 = Math.min(width - 1, x + r);
+    const y0 = Math.max(0, y - r), y1 = Math.min(height - 1, y + r);
+    const sum = sat[(y1 + 1) * w1 + (x1 + 1)] - sat[y0 * w1 + (x1 + 1)]
+              - sat[(y1 + 1) * w1 + x0] + sat[y0 * w1 + x0];
+    return { sum, area: (x1 - x0 + 1) * (y1 - y0 + 1) };
+  };
+
+  // Erode to cores, then dilate the cores back over the original mask. Plain
+  // erosion alone would strip a band off every cabinet edge, because a
+  // straight boundary sits at exactly half density.
+  const open = (mask) => {
+    const r = o.densityRadius;
+    if (r <= 0) return mask;
+
+    const core = new Uint8Array(px);
+    const satMask = integrate(mask);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        if (!mask[i]) continue;
+        const { sum, area } = windowSum(satMask, x, y, r);
+        if (sum / area >= o.minDensity) core[i] = 1;
+      }
+    }
+
+    const out2 = new Uint8Array(px);
+    const satCore = integrate(core);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        if (!mask[i]) continue;
+        if (windowSum(satCore, x, y, r).sum > 0) out2[i] = 1;
+      }
+    }
+    return out2;
   };
 
   let region = build(o.threshold);
@@ -169,6 +233,25 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
       thresholdUsed = o.fallbackThreshold;
     }
   }
+
+  const rawCount = region.count;
+  region.mask = open(region.mask);
+
+  // Lightness statistics have to come from the mask that will actually be
+  // used, so this sweep runs after the opening rather than during the build.
+  let count = 0, sumL = 0, minL = 100, maxL = 0;
+  for (let i = 0, p = 0; i < px; i++, p += 3) {
+    if (!region.mask[i]) continue;
+    const L = rgbToLab([rend[p], rend[p + 1], rend[p + 2]])[0];
+    count++;
+    sumL += L;
+    if (L < minL) minL = L;
+    if (L > maxL) maxL = L;
+  }
+  region.count = count;
+  region.meanL = count ? sumL / count : 0;
+  region.minL = minL;
+  region.maxL = maxL;
 
   if (!region.count) {
     return {
@@ -223,6 +306,9 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
     stats: {
       maskPixels: region.count,
       maskFraction: +(region.count / px).toFixed(4),
+      // What the shape test threw away. A big number here is misalignment on a
+      // high-frequency texture - wood grain, granite - not a real surface.
+      openingRemoved: +((rawCount - region.count) / px).toFixed(4),
       thresholdUsed,
       // The two tests, reported separately. changedFraction well above
       // maskFraction means the model altered a lot the colour test rejected -
