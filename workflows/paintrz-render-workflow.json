@@ -329,6 +329,15 @@
               "outputPropertyName": "data"
             }
           }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "image/png"
+            }
+          ]
         }
       },
       "id": "call_dezgo",
