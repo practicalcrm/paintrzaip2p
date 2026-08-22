@@ -1,0 +1,414 @@
+{
+  "name": "TEMP — Render Pipeline Self-Test",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual_trigger",
+      "name": "When clicking Test workflow",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/profiles?select=id,email,credits_balance,subscription_status,subscription_plan,brand_logo_url,brand_contact&email=eq.mypaintr@gmail.com&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "id": "find_profile",
+      "name": "Find Test Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -900,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// A PostgREST miss arrives as ZERO items, which stops a branch dead with no\n// error at all. alwaysOutputData turns that into one empty item so we reach\n// here and can say what actually went wrong.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.id) return it;\n  }\n  return null;\n}\n\nconst profile = firstRow('Find Test Profile');\nif (!profile) {\n  throw new Error('no profile for mypaintr@gmail.com - check the Supabase key shape before anything else: sb_secret_ goes in the apikey header ONLY');\n}\n\n// Compute Access lets a render through on an active subscription OR on at\n// least one credit. If neither holds, the pipeline answers 402 and we learn\n// nothing about BFL - so top the test account up rather than burn the run.\nconst active = profile.subscription_status === 'active';\nconst credits = profile.credits_balance || 0;\n\nreturn [{ json: {\n  user_id: profile.id,\n  email: profile.email,\n  credits,\n  subscription_active: active,\n  needs_credit: !active && credits < 1,\n  brand_logo_url: profile.brand_logo_url || null,\n  brand_contact: profile.brand_contact || null\n}, pairedItem: 0 }];"
+      },
+      "id": "read_profile",
+      "name": "Read Profile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "needscredit",
+              "leftValue": "={{ $json.needs_credit }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "needs_credit",
+      "name": "Needs A Credit?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/profiles?id=eq.{{ $json.user_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"credits_balance\": 3 } }}",
+        "options": {}
+      },
+      "id": "grant_credits",
+      "name": "Grant Test Credits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        -160
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?select=id,original_photo_url,created_at&user_id=eq.{{ $('Read Profile').first().json.user_id }}&original_photo_url=not.is.null&order=created_at.desc&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "id": "find_photo",
+      "name": "Find A Photo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -20,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reuses the newest photo this account has already uploaded rather than\n// inventing a URL: it is known-public, known-fetchable, and the image service\n// has to fetch the same one as original_url.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.original_photo_url) return it;\n  }\n  return null;\n}\n\nconst prior = firstRow('Find A Photo');\nif (!prior || !prior.original_photo_url) {\n  throw new Error('this account has no prior render to borrow a photo from - upload one through the app first');\n}\n\nconst profile = $('Read Profile').first().json;\n\n// A dark navy on cabinets is the hardest case for the LAB pass: a big\n// lightness move, so if mean-L retargeting is going to misbehave it shows here\n// rather than on some safe greige.\nreturn [{ json: {\n  user_id: profile.user_id,\n  original_photo_url: prior.original_photo_url,\n  color_hex: '#232E38',\n  color_name: 'Sherwin-Williams Naval (SW 6244)',\n  surface: 'kitchen cabinets',\n  prompt: 'Repaint the kitchen cabinets Sherwin-Williams Naval.',\n  brand_logo_url: profile.brand_logo_url,\n  brand_contact: profile.brand_contact\n}, pairedItem: 0 }];"
+      },
+      "id": "build_test",
+      "name": "Build Test Render",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"user_id\": $json.user_id, \"original_photo_url\": $json.original_photo_url, \"color_hex\": $json.color_hex, \"color_name\": $json.color_name, \"prompt\": $json.prompt, \"status\": \"processing\" } }}",
+        "options": {}
+      },
+      "id": "insert_render",
+      "name": "Insert Render Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        0
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Exactly the payload app.html posts, so this exercises the real contract\n// rather than a convenient subset of it.\nconst inserted = $input.first().json;\nconst row = Array.isArray(inserted) ? inserted[0] : inserted;\nif (!row || !row.id) throw new Error('insert returned no row: ' + JSON.stringify(inserted).slice(0, 400));\n\nconst test = $('Build Test Render').first().json;\n\nreturn [{ json: {\n  render_id: row.id,\n  user_id: test.user_id,\n  photo_url: test.original_photo_url,\n  color_hex: test.color_hex,\n  color_name: test.color_name,\n  colors: [{ hex: test.color_hex, name: 'Naval', code: 'SW 6244', brand: 'Sherwin-Williams' }],\n  surface: test.surface,\n  prompt: test.prompt,\n  brand_logo_url: test.brand_logo_url,\n  brand_contact: test.brand_contact\n}, pairedItem: 0 }];"
+      },
+      "id": "build_webhook",
+      "name": "Build Webhook Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-production-e390.up.railway.app/webhook/paintrz-render",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "fire_webhook",
+      "name": "Fire Render Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://pwkrwyemkjlmjdacelyi.supabase.co/rest/v1/renders?select=id,status,rendered_photo_url,branded_photo_url,corrections_used&id=eq.{{ $('Build Webhook Body').first().json.render_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "id": "read_result",
+      "name": "Read Result Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "8BZNKwDvrkAm9TKo",
+          "name": "supabase new api 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The webhook answers 200 on the happy path and 4xx/5xx when the pipeline\n// refuses, but the row is the real record - a render that half-finished shows\n// up here as done-with-no-urls, which a status code alone would hide.\nfunction firstRow(nodeName){\n  let items = [];\n  try { items = $(nodeName).all().map(i => i.json).filter(Boolean); } catch (e) { return null; }\n  for (const it of items){\n    if (Array.isArray(it)){ if (it[0]) return it[0]; continue; }\n    if (it && it.id) return it;\n  }\n  return null;\n}\n\nconst row = firstRow('Read Result Row') || {};\nconst webhook = $('Fire Render Webhook').first().json;\n\nconst ok = row.status === 'done' && !!row.rendered_photo_url && !!row.branded_photo_url;\n\nreturn [{ json: {\n  passed: ok,\n  render_id: row.id || null,\n  row_status: row.status || 'row not found',\n  rendered_photo_url: row.rendered_photo_url || null,\n  branded_photo_url: row.branded_photo_url || null,\n  webhook_response: webhook,\n  next: ok\n    ? 'open both URLs and judge the colour'\n    : 'open the Render Pipeline execution list - the failing node names the cause'\n}, pairedItem: 0 }];"
+      },
+      "id": "verdict",
+      "name": "Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Temporary — delete after the pipeline is proven\n\nStands in for app.html so the render pipeline can be exercised without a browser, a login, or an upload.\n\nIt borrows the newest photo already on the test account, inserts a fresh `renders` row, posts **the exact payload app.html posts**, then reads the row back. `Verdict` is the node to read.\n\n**It spends real money.** One credit off the test account and one BFL Kontext call per run. `Grant Test Credits` sets the balance to 3 only when the account has none and no active subscription — without it the pipeline answers 402 and the run teaches nothing about BFL.\n\n`Fire Render Webhook` continues on error on purpose: a 402 or 500 must still reach `Read Result Row`, because what the row says is the actual finding.",
+        "height": 460,
+        "width": 460,
+        "color": 3
+      },
+      "id": "sticky_selftest",
+      "name": "Sticky — What this is",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        -540
+      ]
+    }
+  ],
+  "connections": {
+    "When clicking Test workflow": {
+      "main": [
+        [
+          {
+            "node": "Find Test Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Test Profile": {
+      "main": [
+        [
+          {
+            "node": "Read Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Profile": {
+      "main": [
+        [
+          {
+            "node": "Needs A Credit?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs A Credit?": {
+      "main": [
+        [
+          {
+            "node": "Grant Test Credits",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find A Photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grant Test Credits": {
+      "main": [
+        [
+          {
+            "node": "Find A Photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find A Photo": {
+      "main": [
+        [
+          {
+            "node": "Build Test Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Test Render": {
+      "main": [
+        [
+          {
+            "node": "Insert Render Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Render Row": {
+      "main": [
+        [
+          {
+            "node": "Build Webhook Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Webhook Body": {
+      "main": [
+        [
+          {
+            "node": "Fire Render Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire Render Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Result Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Result Row": {
+      "main": [
+        [
+          {
+            "node": "Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "paintrz"
+  }
+}
