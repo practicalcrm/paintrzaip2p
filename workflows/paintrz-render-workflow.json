@@ -273,28 +273,6 @@
     },
     {
       "parameters": {
-        "url": "={{ $json.init_image_url }}",
-        "options": {
-          "response": {
-            "response": {
-              "responseFormat": "file",
-              "outputPropertyName": "original"
-            }
-          }
-        }
-      },
-      "id": "download_init_image",
-      "name": "Download Init Image",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -120,
-        -80
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
         "method": "POST",
         "url": "http://paintrzaip2p.railway.internal:8080/flag",
         "sendBody": true,
@@ -306,6 +284,28 @@
       },
       "id": "pick_flag",
       "name": "Pick Flag Colour",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -120,
+        -80
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Build Prompt').item.json.init_image_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "original"
+            }
+          }
+        }
+      },
+      "id": "download_init_image",
+      "name": "Download Init Image",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -947,7 +947,7 @@
       "main": [
         [
           {
-            "node": "Download Init Image",
+            "node": "Pick Flag Colour",
             "type": "main",
             "index": 0
           }
@@ -965,7 +965,7 @@
       "main": [
         [
           {
-            "node": "Pick Flag Colour",
+            "node": "Build BFL Payloads",
             "type": "main",
             "index": 0
           }
@@ -1196,7 +1196,7 @@
       "main": [
         [
           {
-            "node": "Build BFL Payloads",
+            "node": "Download Init Image",
             "type": "main",
             "index": 0
           }
