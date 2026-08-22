@@ -288,6 +288,11 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
   const rawCount = region.count;
   region.mask = open(region.mask);
 
+  // Counted here rather than at the end, because the dilation below grows the
+  // mask again and would otherwise report this as a negative removal.
+  let openedCount = 0;
+  for (let i = 0; i < px; i++) if (region.mask[i]) openedCount++;
+
   // Only the flag mask is grown. The diff-and-colour mask already errs
   // generous, and widening it further is exactly the wrong direction.
   if (opts.mask) region.mask = dilate(region.mask, o.dilateRadius);
@@ -363,7 +368,9 @@ function correct(orig, rend, width, height, targetHex, targetLrv, opts = {}) {
       maskFraction: +(region.count / px).toFixed(4),
       // What the shape test threw away. A big number here is misalignment on a
       // high-frequency texture - wood grain, granite - not a real surface.
-      openingRemoved: +((rawCount - region.count) / px).toFixed(4),
+      openingRemoved: +((rawCount - openedCount) / px).toFixed(4),
+      // And what growing past the render seam added back.
+      dilateAdded: +((region.count - openedCount) / px).toFixed(4),
       thresholdUsed,
       // The two tests, reported separately. changedFraction well above
       // maskFraction means the model altered a lot the colour test rejected -
